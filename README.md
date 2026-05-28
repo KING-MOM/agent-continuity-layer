@@ -277,3 +277,5 @@ If a change improves execution but not continuity, trust, handoff, artifacts, or
 - [`docs/handoff-vs-continuity.md`](docs/handoff-vs-continuity.md) — why the worker queue is a subsystem
 - [`docs/roadmap.md`](docs/roadmap.md) — milestone sequence
 - [`docs/install.md`](docs/install.md) — lower-level install notes
+- [`docs/versioning.md`](docs/versioning.md) — SemVer commitment, API surface, deprecation policy, criteria for v1.0
+- [`SECURITY.md`](SECURITY.md) — vulnerability disclosure process and response expectations

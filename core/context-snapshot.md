@@ -1,6 +1,6 @@
 # Project Context Snapshot
 
-_Generated: 2026-05-28T02:02:38Z from 15653022ac58e5d66d87b27f0255d91067a39285_
+_Generated: 2026-05-28T02:26:30Z from 058f952b61d21108b8e7edc9a0cca3ee4e24869a_
 
 > This is a generated snapshot. Do not edit by hand — run `scripts/context.sh --write` to refresh. The one operator-maintained field is `next_safe_action`, sourced from `core/context-pinned.json`.
 
@@ -10,7 +10,7 @@ _Generated: 2026-05-28T02:02:38Z from 15653022ac58e5d66d87b27f0255d91067a39285_
 - **Charter**: Durable continuity for AI agents across sessions, tools, devices, and model providers.
 - **Repo**: `~/.openclaw/workspace/agent-continuity-layer`
 - **Branch**: `main`
-- **HEAD**: `15653022ac58e5d66d87b27f0255d91067a39285`
+- **HEAD**: `058f952b61d21108b8e7edc9a0cca3ee4e24869a`
 
 ## Milestone State
 
@@ -22,7 +22,7 @@ _The roadmap tracks majors only. The next concrete sub-slice (e.g. M7.1) lives i
 
 ## Next Safe Action
 
-bootstrap.sh gained the --connect-all opt-in flag. Adoption story now has two clean variants: one command for install + wire (curl … | bash -s -- --connect-all), or default two-step for users who want explicit consent on third-party config writes. The default stays conservative so a plain curl-pipe never touches Claude Desktop / Cursor / Zed configs without the operator typing the flag. README and docs/install.md updated to show both paths. Bumping to v0.1.6 because public install UX changed. After release, next active arc choices remain: M14.1 cross-project queries, or M14.2 per-project context pin (schema bump candidate). Out of scope still: release signing, multi-tenant trust, cryptographic identity.
+First slice of the M15 release-integrity arc landed: SECURITY.md (vuln disclosure via GitHub Private Vulnerability Reporting, 90-day coordinated disclosure, aspirational best-effort SLA, in-scope vs out-of-scope explicit) and docs/versioning.md (SemVer commitment, three API surfaces defined: adapter contract + CLI + schemas, deprecation policy, 10 criteria for v1.0 with no date commitment, LTS intent documented). PVR enabled on the repo. No code changes, no release bump — docs slice. Next active slice in M15: M15.1 reproducible builds (release.sh produces deterministic tarballs; release-smoke verifies rebuild yields identical sha256; documented in install.md as precursor to signed releases). Out of scope for v0.1.x stays: signed releases (M15.3), multi-tenant trust, cryptographic identity. Tier 2+3 enterprise gaps (SOC2, E&O insurance, vendor entity, bus factor mitigation) are explicitly NOT technical work and remain out of agentic scope.
 
 ## Navigation
 
@@ -67,5 +67,8 @@ _No open tasks._
 
 | sha | milestone | primitive | subject |
 |---|---|---|---|
+| `058f952` | — | — | feat(adapters): add named web model adapter tokens |
+| `85f2384` | — | — | release: v0.1.6 |
+| `c190f30` | — | — | feat(bootstrap): --connect-all opt-in flag for one-command install + wire |
 | `1565302` | — | — | chore: initialize sanitized public history |
 
