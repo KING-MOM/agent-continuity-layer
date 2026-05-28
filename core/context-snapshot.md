@@ -1,6 +1,6 @@
 # Project Context Snapshot
 
-_Generated: 2026-05-28T01:48:28Z from cda0b09cc7b0625d3fbcb8e327ddecdf93be09dc_
+_Generated: 2026-05-28T02:02:38Z from 15653022ac58e5d66d87b27f0255d91067a39285_
 
 > This is a generated snapshot. Do not edit by hand — run `scripts/context.sh --write` to refresh. The one operator-maintained field is `next_safe_action`, sourced from `core/context-pinned.json`.
 
@@ -10,7 +10,7 @@ _Generated: 2026-05-28T01:48:28Z from cda0b09cc7b0625d3fbcb8e327ddecdf93be09dc_
 - **Charter**: Durable continuity for AI agents across sessions, tools, devices, and model providers.
 - **Repo**: `~/.openclaw/workspace/agent-continuity-layer`
 - **Branch**: `main`
-- **HEAD**: `cda0b09cc7b0625d3fbcb8e327ddecdf93be09dc`
+- **HEAD**: `15653022ac58e5d66d87b27f0255d91067a39285`
 
 ## Milestone State
 
@@ -22,7 +22,7 @@ _The roadmap tracks majors only. The next concrete sub-slice (e.g. M7.1) lives i
 
 ## Next Safe Action
 
-Privacy cleanup and v0.1.5 release are the active deployment: public examples, docs artifacts, schema examples, and v0.1 reference material have been sanitized to remove operator names, local usernames, hostnames/IPs, org domains, and absolute temp paths. Next: publish v0.1.5 as latest so new installs fetch the clean artifact. Historical releases/tags still need a separate explicit purge/history decision if the operator wants old public snapshots removed rather than merely superseded.
+bootstrap.sh gained the --connect-all opt-in flag. Adoption story now has two clean variants: one command for install + wire (curl … | bash -s -- --connect-all), or default two-step for users who want explicit consent on third-party config writes. The default stays conservative so a plain curl-pipe never touches Claude Desktop / Cursor / Zed configs without the operator typing the flag. README and docs/install.md updated to show both paths. Bumping to v0.1.6 because public install UX changed. After release, next active arc choices remain: M14.1 cross-project queries, or M14.2 per-project context pin (schema bump candidate). Out of scope still: release signing, multi-tenant trust, cryptographic identity.
 
 ## Navigation
 
@@ -67,5 +67,5 @@ _No open tasks._
 
 | sha | milestone | primitive | subject |
 |---|---|---|---|
-| `cda0b09` | — | — | chore: initialize sanitized public history |
+| `1565302` | — | — | chore: initialize sanitized public history |
 

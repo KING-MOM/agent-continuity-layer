@@ -42,13 +42,22 @@ Current limit: release checksums detect transport corruption, not publisher iden
 
 ## Install
 
-One-liner (recommended):
+**One command, install + wire to all your local agents:**
+
+```bash
+curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash -s -- --connect-all
+```
+
+`--connect-all` opts you in to a second step that writes MCP-server entries into Claude Desktop, Cursor, and Zed configs (with backups) and installs thin skills into Claude/Codex/OpenClaw homes when they exist. Restart any running MCP clients afterward.
+
+**Default (install only, conservative — wiring stays explicit):**
 
 ```bash
 curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash
+agent-continuity connect all --apply
 ```
 
-The bootstrap script resolves the latest release, downloads the tarball + `.sha256`, verifies integrity (same `shasum -a 256 -c` a manual install would do), extracts to a tempdir, and runs `install.sh`. It writes only under `$XDG_DATA_HOME/agent-continuity/` and `$HOME/.local/bin/agent-continuity`. It does NOT auto-wire local agents — that's a separate, explicit `connect` step below.
+Either path: bootstrap resolves the latest release, downloads tarball + `.sha256`, verifies with `shasum -a 256 -c`, extracts to a tempdir, runs `install.sh`. Install itself writes only under `$XDG_DATA_HOME/agent-continuity/` and `$HOME/.local/bin/agent-continuity`; the `connect` step is the one that touches third-party app configs and is why it's separate by default.
 
 After install:
 
@@ -57,9 +66,9 @@ agent-continuity --version
 agent-continuity doctor --human
 ```
 
-Or, if you'd rather see and verify everything yourself before any code runs, the step-by-step tarball flow lives in [`docs/install.md`](docs/install.md). The integrity guarantee is identical either way; the difference is whether you eyeball each download before extraction.
+If you'd rather see and verify everything before any code runs, the step-by-step tarball flow lives in [`docs/install.md`](docs/install.md). Integrity guarantee is identical either way.
 
-Using Claude Code, Codex CLI, or another shell-capable agent? Just tell it to install agent-continuity-layer from `https://github.com/KING-MOM/agent-continuity-layer` and it can run the one-liner for you.
+**Using Claude Code, Codex CLI, or another shell-capable agent?** Tell it to install agent-continuity-layer from `https://github.com/KING-MOM/agent-continuity-layer` and it can run the one-liner for you.
 
 The checksum detects transport corruption — not publisher identity. An attacker who can rewrite the tarball can rewrite the bootstrap and its sha256 too. Signed releases are a future trust milestone; the same honest framing applies to either install path.
 

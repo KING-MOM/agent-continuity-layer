@@ -33,6 +33,43 @@ GITHUB_API="https://api.github.com/repos/${REPO}"
 GITHUB_DL="https://github.com/${REPO}/releases/download"
 
 # ────────────────────────────────────────────────────────────────
+# Argument parsing
+#
+# --connect-all  Opt-in: after install completes, also run
+#                `agent-continuity connect all --apply`. This writes
+#                into Claude Desktop / Cursor / Zed config files and
+#                installs thin skills into Claude/Codex/OpenClaw
+#                homes. Off by default to keep `curl … | bash` from
+#                silently touching third-party app configs.
+
+CONNECT_ALL=0
+for arg in "$@"; do
+  case "${arg}" in
+    --connect-all) CONNECT_ALL=1 ;;
+    -h|--help)
+      cat <<'EOF'
+bootstrap.sh — one-line install for agent-continuity-layer.
+
+Usage:
+  curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash
+  curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash -s -- --connect-all
+
+Flags:
+  --connect-all   After install, run `agent-continuity connect all --apply`
+                  to wire Claude Desktop, Cursor, Zed, and thin skills.
+                  Without this flag, install is purely substrate-local;
+                  wiring is a separate explicit step the operator runs.
+  -h, --help      This message.
+EOF
+      exit 0
+      ;;
+    *)
+      echo "warning: ignoring unknown argument: ${arg}" >&2
+      ;;
+  esac
+done
+
+# ────────────────────────────────────────────────────────────────
 # Pre-flight: required tools
 
 _need() {
@@ -96,12 +133,46 @@ echo "==> running install.sh"
 "agent-continuity-v${VERSION}/scripts/install.sh" --from-tarball "${TARBALL_NAME}"
 
 # ────────────────────────────────────────────────────────────────
-# Next-steps banner. We deliberately do NOT auto-run `connect all`
-# because writing into MCP-client configs is a real side effect on
-# files the operator owns. Make them type the second command.
+# Optional auto-connect. Off by default — wiring third-party app
+# configs (Claude Desktop, Cursor, Zed, thin skills) should be an
+# explicit operator action, not a silent side effect of `curl | bash`.
+# The user opts in via `--connect-all` if they want one-command UX.
+#
+# If connect fails the install itself is still complete and usable;
+# we warn and point at `connect doctor` rather than failing the
+# whole bootstrap.
 
 echo
 echo "✓ installed agent-continuity v${VERSION}"
+
+if [ "${CONNECT_ALL}" = "1" ]; then
+  BIN_HOME="${XDG_BIN_HOME:-${HOME}/.local/bin}"
+  SHIM="${BIN_HOME}/agent-continuity"
+  echo
+  echo "==> wiring local agents (Claude Desktop / Cursor / Zed / thin skills)"
+  if [ ! -x "${SHIM}" ]; then
+    cat >&2 <<EOF
+warn: cannot locate installed CLI at ${SHIM}
+      install is complete, but auto-connect was skipped.
+      diagnose: ls -la ${BIN_HOME}
+EOF
+  elif "${SHIM}" connect all --apply; then
+    echo
+    echo "✓ wiring complete"
+    echo
+    echo "next step:"
+    echo "  restart any running MCP clients so they pick up the new config"
+  else
+    cat >&2 <<EOF
+
+warn: \`connect all --apply\` exited non-zero.
+      install itself is complete; diagnose with:
+          agent-continuity connect doctor
+EOF
+  fi
+  exit 0
+fi
+
 echo
 echo "next steps:"
 echo "  1. ensure \$HOME/.local/bin is on your PATH"
@@ -120,3 +191,6 @@ echo "  agent-continuity quickstart init"
 echo "  agent-continuity quickstart run-fake-worker"
 echo "  agent-continuity quickstart decisions list"
 echo "  agent-continuity quickstart reset"
+echo
+echo "tip: to bootstrap + wire in one shot next time, append --connect-all:"
+echo "  curl -fsSL .../bootstrap.sh | bash -s -- --connect-all"

@@ -4,8 +4,20 @@ Two install paths. Both ship the same substrate, both verify integrity the same 
 
 ## One-liner (recommended)
 
+Two variants. Pick based on whether you want bootstrap to also wire your local agents.
+
+**Install + wire local agents (one command):**
+
+```bash
+curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash -s -- --connect-all
+```
+
+**Install only, wiring stays explicit (conservative default):**
+
 ```bash
 curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash
+# then, when you're ready:
+agent-continuity connect all --apply
 ```
 
 The bootstrap script:
@@ -15,14 +27,17 @@ The bootstrap script:
 3. Verifies the tarball against the sha256 (cross-platform: `shasum -a 256 -c` or `sha256sum -c`).
 4. Aborts on mismatch — nothing is installed.
 5. Extracts to a tempdir, runs `install.sh`, deletes the tempdir.
-6. Prints next-steps for `agent-continuity connect doctor` and `connect all --apply`.
+6. If `--connect-all` was passed: runs `agent-continuity connect all --apply` to wire Claude Desktop / Cursor / Zed / thin skills. On connect failure, install is still complete and bootstrap exits 0 with a warning pointing at `connect doctor`.
+7. Otherwise: prints next-steps for `agent-continuity connect doctor` and `connect all --apply`.
 
-It writes only to:
+The install step itself writes only to:
 - `$XDG_DATA_HOME/agent-continuity/v{X.Y.Z}/` (the substrate code)
 - `$XDG_DATA_HOME/agent-continuity/active` (symlink to current version)
 - `$HOME/.local/bin/agent-continuity` (PATH shim)
 
-It does NOT touch `~/.config/agent-continuity/`, `~/.cache/agent-continuity/`, `~/.local/state/agent-continuity/`, or any MCP-client config. Wiring local agents into the substrate is a separate, explicit `connect` step described in the README.
+It does NOT touch `~/.config/agent-continuity/`, `~/.cache/agent-continuity/`, `~/.local/state/agent-continuity/`. Without `--connect-all`, it also doesn't touch any MCP-client config files — wiring is a separate, explicit step.
+
+`--connect-all` is opt-in by design. Writing into Claude Desktop, Cursor, and Zed configs is a real side effect on third-party files the operator owns. Making it explicit means `curl … | bash` never silently edits those configs unless the user typed the flag.
 
 ## Using Claude Code or Codex CLI
 
