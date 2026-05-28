@@ -1,6 +1,6 @@
 # Project Context Snapshot
 
-_Generated: 2026-05-28T02:26:30Z from 058f952b61d21108b8e7edc9a0cca3ee4e24869a_
+_Generated: 2026-05-28T05:12:00Z from 4297ad20d0f51cd8b59051f41b6ea206016dda1b_
 
 > This is a generated snapshot. Do not edit by hand — run `scripts/context.sh --write` to refresh. The one operator-maintained field is `next_safe_action`, sourced from `core/context-pinned.json`.
 
@@ -10,11 +10,11 @@ _Generated: 2026-05-28T02:26:30Z from 058f952b61d21108b8e7edc9a0cca3ee4e24869a_
 - **Charter**: Durable continuity for AI agents across sessions, tools, devices, and model providers.
 - **Repo**: `~/.openclaw/workspace/agent-continuity-layer`
 - **Branch**: `main`
-- **HEAD**: `058f952b61d21108b8e7edc9a0cca3ee4e24869a`
+- **HEAD**: `4297ad20d0f51cd8b59051f41b6ea206016dda1b`
 
 ## Milestone State
 
-- **Last completed**: unknown
+- **Last completed**: M15.1
 - **Next major milestone** (per roadmap): (none listed beyond last_completed)
 - **Milestone rule**: Every milestone must strengthen at least one charter continuity primitive; delegation-only work belongs in adapters.
 
@@ -22,7 +22,7 @@ _The roadmap tracks majors only. The next concrete sub-slice (e.g. M7.1) lives i
 
 ## Next Safe Action
 
-First slice of the M15 release-integrity arc landed: SECURITY.md (vuln disclosure via GitHub Private Vulnerability Reporting, 90-day coordinated disclosure, aspirational best-effort SLA, in-scope vs out-of-scope explicit) and docs/versioning.md (SemVer commitment, three API surfaces defined: adapter contract + CLI + schemas, deprecation policy, 10 criteria for v1.0 with no date commitment, LTS intent documented). PVR enabled on the repo. No code changes, no release bump — docs slice. Next active slice in M15: M15.1 reproducible builds (release.sh produces deterministic tarballs; release-smoke verifies rebuild yields identical sha256; documented in install.md as precursor to signed releases). Out of scope for v0.1.x stays: signed releases (M15.3), multi-tenant trust, cryptographic identity. Tier 2+3 enterprise gaps (SOC2, E&O insurance, vendor entity, bus factor mitigation) are explicitly NOT technical work and remain out of agentic scope.
+First slice of M16 (device-to-device handoff) shipped: `agent-continuity handoff export/import/inspect` packages substrate state (decisions, registry, trust policy, queue) and optionally Claude Code session transcripts into a tar.gz. Default export is state-only; --include-claude opts into transcript transfer with a path-encoding guard that skips claude restoration when source HOME != target HOME. Import backs up existing state under XDG_DATA_HOME unless --no-backup. New M-arc separate from M15 release-integrity (which still has M15.2 SBOM + M15.3 cosign signed releases pending). Next slices to choose between: M15.2 SBOM (Tier 1 enterprise readiness), M15.3 cosign (closes Tier 1; bumps to v0.2.0), or cross-username Claude path rewrite as a follow-up to this slice. M14.1 cross-project queries still pinned as future.
 
 ## Navigation
 
@@ -67,8 +67,9 @@ _No open tasks._
 
 | sha | milestone | primitive | subject |
 |---|---|---|---|
-| `058f952` | — | — | feat(adapters): add named web model adapter tokens |
-| `85f2384` | — | — | release: v0.1.6 |
-| `c190f30` | — | — | feat(bootstrap): --connect-all opt-in flag for one-command install + wire |
-| `1565302` | — | — | chore: initialize sanitized public history |
+| `4297ad2` | — | — | docs: add security and versioning policy |
+| `9e512ef` | — | — | release: v0.1.7 |
+| `30bb5cd` | M15.1 | — | M15.1 polish: smoke verifies reproducibility + docs explain how to verify |
+| `f7ae48e` | M15.1 | — | M15.1: reproducible builds — deterministic tarballs via _repro_tar.py |
+| `2f9c295` | M15.0 | — | M15.0: SECURITY.md + versioning policy — release integrity arc opens |
 

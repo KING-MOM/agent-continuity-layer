@@ -39,6 +39,7 @@ SUBCOMMANDS=(
   "decisions:cross-agent decision log"
   "context:project context snapshot"
   "project:local project registry"
+  "handoff:device-to-device state handoff (export/import/inspect)"
   "worker:worker-task queue"
   "bundle:adapter bundle export/ingest"
   "mcp:MCP tool surface"

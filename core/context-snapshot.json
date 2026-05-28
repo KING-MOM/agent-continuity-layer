@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-05-28T02:26:30Z",
-  "source_head_sha": "058f952b61d21108b8e7edc9a0cca3ee4e24869a",
+  "generated_at": "2026-05-28T05:12:00Z",
+  "source_head_sha": "4297ad20d0f51cd8b59051f41b6ea206016dda1b",
   "identity": {
     "name": "agent-continuity-layer",
     "charter_one_line": "Durable continuity for AI agents across sessions, tools, devices, and model providers.",
@@ -9,7 +9,7 @@
     "branch": "main"
   },
   "milestone": {
-    "last_completed": null,
+    "last_completed": "M15.1",
     "last_completed_primitive": null,
     "next_major_milestone": {
       "present": false,
@@ -59,29 +59,35 @@
   },
   "recent_activity": [
     {
-      "sha": "058f952",
-      "subject": "feat(adapters): add named web model adapter tokens",
+      "sha": "4297ad2",
+      "subject": "docs: add security and versioning policy",
       "milestone": null,
       "primitive": null
     },
     {
-      "sha": "85f2384",
-      "subject": "release: v0.1.6",
+      "sha": "9e512ef",
+      "subject": "release: v0.1.7",
       "milestone": null,
       "primitive": null
     },
     {
-      "sha": "c190f30",
-      "subject": "feat(bootstrap): --connect-all opt-in flag for one-command install + wire",
-      "milestone": null,
+      "sha": "30bb5cd",
+      "subject": "M15.1 polish: smoke verifies reproducibility + docs explain how to verify",
+      "milestone": "M15.1",
       "primitive": null
     },
     {
-      "sha": "1565302",
-      "subject": "chore: initialize sanitized public history",
-      "milestone": null,
+      "sha": "f7ae48e",
+      "subject": "M15.1: reproducible builds \u2014 deterministic tarballs via _repro_tar.py",
+      "milestone": "M15.1",
+      "primitive": null
+    },
+    {
+      "sha": "2f9c295",
+      "subject": "M15.0: SECURITY.md + versioning policy \u2014 release integrity arc opens",
+      "milestone": "M15.0",
       "primitive": null
     }
   ],
-  "next_safe_action": "First slice of the M15 release-integrity arc landed: SECURITY.md (vuln disclosure via GitHub Private Vulnerability Reporting, 90-day coordinated disclosure, aspirational best-effort SLA, in-scope vs out-of-scope explicit) and docs/versioning.md (SemVer commitment, three API surfaces defined: adapter contract + CLI + schemas, deprecation policy, 10 criteria for v1.0 with no date commitment, LTS intent documented). PVR enabled on the repo. No code changes, no release bump \u2014 docs slice. Next active slice in M15: M15.1 reproducible builds (release.sh produces deterministic tarballs; release-smoke verifies rebuild yields identical sha256; documented in install.md as precursor to signed releases). Out of scope for v0.1.x stays: signed releases (M15.3), multi-tenant trust, cryptographic identity. Tier 2+3 enterprise gaps (SOC2, E&O insurance, vendor entity, bus factor mitigation) are explicitly NOT technical work and remain out of agentic scope."
+  "next_safe_action": "First slice of M16 (device-to-device handoff) shipped: `agent-continuity handoff export/import/inspect` packages substrate state (decisions, registry, trust policy, queue) and optionally Claude Code session transcripts into a tar.gz. Default export is state-only; --include-claude opts into transcript transfer with a path-encoding guard that skips claude restoration when source HOME != target HOME. Import backs up existing state under XDG_DATA_HOME unless --no-backup. New M-arc separate from M15 release-integrity (which still has M15.2 SBOM + M15.3 cosign signed releases pending). Next slices to choose between: M15.2 SBOM (Tier 1 enterprise readiness), M15.3 cosign (closes Tier 1; bumps to v0.2.0), or cross-username Claude path rewrite as a follow-up to this slice. M14.1 cross-project queries still pinned as future."
 }

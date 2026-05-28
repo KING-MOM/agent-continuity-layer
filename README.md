@@ -268,6 +268,7 @@ If a change improves execution but not continuity, trust, handoff, artifacts, or
 
 - [`docs/north-star.md`](docs/north-star.md) — two-minute product direction
 - [`docs/connect.md`](docs/connect.md) — connect local adapters in one step
+- [`docs/handoff.md`](docs/handoff.md) — device-to-device state handoff (export / import / inspect)
 - [`docs/quickstart.md`](docs/quickstart.md) — first successful delegated task
 - [`docs/mcp-integration.md`](docs/mcp-integration.md) — MCP client setup
 - [`docs/python-sdk.md`](docs/python-sdk.md) — Python wrapper for the adapter contract
