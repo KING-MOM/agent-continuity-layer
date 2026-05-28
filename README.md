@@ -2,7 +2,11 @@
 
 Never lose the thread when switching agents, models, tools, machines, or sessions.
 
-`agent-continuity-layer` is a memory substrate for AI-agent work. It preserves context, decisions, handoffs, and artifacts across agents, models, tools, machines, and sessions.
+Most agent tools rediscover project state every session: chat history gets rolled forward or lost, RAG retrieves scattered fragments, and each new model reconstructs the "what happened?" story from scratch.
+
+`agent-continuity-layer` compiles that state into explicit continuity artifacts. Fresh agents read context snapshots, decision logs, handoff ledgers, trust policy, project registry, and sync metadata instead of scattered history.
+
+Those artifacts are attributed and audit-trailed. A future agent can see which adapter wrote a decision, which device last synced memory, which task produced an artifact, and which trust boundary allowed the write.
 
 Delegation is a mechanism. Continuity is the product.
 
@@ -32,7 +36,7 @@ A fresh agent should be able to enter a project and know:
 - what it is allowed to do,
 - and what artifact it should leave for the next agent.
 
-The substrate keeps that state in explicit files and schemas instead of buried chat history.
+The substrate keeps that state in explicit files and schemas instead of buried chat history. RAG rediscovers; continuity compiles.
 
 ## Durability Model
 
@@ -65,7 +69,7 @@ curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/do
 agent-continuity connect all --apply
 ```
 
-Either path: bootstrap resolves the latest release, downloads tarball + `.sha256`, verifies with `shasum -a 256 -c`, extracts to a tempdir, runs `install.sh`. Install itself writes only under `$XDG_DATA_HOME/agent-continuity/` and `$HOME/.local/bin/agent-continuity`; the `connect` step is the one that touches third-party app configs and is why it's separate by default.
+Either path: bootstrap resolves the latest release, downloads tarball + integrity/signature sidecars, verifies them, extracts to a tempdir, and runs `install.sh`. Install itself writes only under `$XDG_DATA_HOME/agent-continuity/` and `$HOME/.local/bin/agent-continuity`; the `connect` step is the one that touches third-party app configs and is why it's separate by default.
 
 After install:
 
@@ -78,7 +82,7 @@ If you'd rather see and verify everything before any code runs, the step-by-step
 
 **Using Claude Code, Codex CLI, or another shell-capable agent?** Tell it to install agent-continuity-layer from `https://github.com/KING-MOM/agent-continuity-layer` and it can run the one-liner for you.
 
-The checksum detects transport corruption — not publisher identity. An attacker who can rewrite the tarball can rewrite the bootstrap and its sha256 too. Signed releases are a future trust milestone; the same honest framing applies to either install path.
+The checksum detects transport corruption. The cosign signature verifies that the artifact was produced by this repo's release workflow identity. The bootstrap script itself is still fetched over HTTPS, so users who need maximum supply-chain assurance should use the step-by-step install flow in [`docs/install.md`](docs/install.md) and verify the downloaded bootstrap/release assets before executing anything.
 
 ## Connect Everything
 
@@ -198,7 +202,13 @@ More detail: [`docs/reference-agent.md`](docs/reference-agent.md)
 
 See [`docs/north-star.md`](docs/north-star.md) for the product direction and [`CHARTER.md`](CHARTER.md) for the rules that keep the project from drifting.
 
-Trust-policy behavior is documented in [`docs/trust-policy.md`](docs/trust-policy.md). The short version: v0.1.x assumes a single operator, local per-device policy, descriptive adapter identity, and explicit audit. Multi-tenant or cross-org authority is future work.
+Trust-policy behavior is documented in [`docs/trust-policy.md`](docs/trust-policy.md). The short version: v0.x assumes a single operator, local per-device policy, descriptive adapter identity, and explicit audit. Multi-tenant or cross-org authority is future work.
+
+## Related Thinking
+
+Andrej Karpathy's [`LLM Wiki`](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) describes the same deeper pattern for personal and research knowledge bases: don't make the model rediscover knowledge from raw documents every time; maintain a persistent, compounding artifact that gets updated as work happens.
+
+`agent-continuity-layer` applies that pattern to multi-agent work. The compiled artifact is not a single-author wiki; it is a set of shared memory primitives with attribution, audit, trust gates, device sync, and adapter portability. That extra machinery matters because many agents, tools, devices, and transports can write to the same continuity layer.
 
 ## Command Surface
 
@@ -247,7 +257,7 @@ v0.1-reference/         sanitized v0.1 provenance, preserved for historical cont
 
 ## Status
 
-Current release: `v0.1.5`
+Current release: `v0.2.0`
 
 Implemented major arcs:
 
@@ -259,6 +269,8 @@ Implemented major arcs:
 - M11: OSS quickstart
 - M12: packaging / release baseline
 - M13: MCP stdio server + integration docs + Python SDK + reference agent
+- M15: reproducible builds, SBOM, signed release artifacts
+- M16: device-to-device handoff export/import/inspect
 
 Roadmap: [`docs/roadmap.md`](docs/roadmap.md)
 
