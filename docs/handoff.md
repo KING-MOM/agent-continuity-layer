@@ -62,9 +62,9 @@ With `--no-backup`:
 
 ## Path-encoding gotcha for Claude sessions
 
-Claude Code stores sessions under `~/.claude/projects/<encoded-absolute-path>/`. The encoded directory name is derived from the absolute path the user was working from when the session was created, e.g. `-Users-operator` (`/Users/<operator>`).
+Claude Code stores sessions under `~/.claude/projects/<encoded-absolute-path>/`. The encoded directory name is derived from the absolute path the user was working from when the session was created, e.g. `-Users-operator` (`/Users/operator`).
 
-If you transfer a Claude-included bundle to a device with a different HOME (different username, e.g. `/Users/<operator>ricio` instead of `/Users/<operator>`), Claude Code on the target won't find the transferred sessions because the encoded dirname won't match.
+If you transfer a Claude-included bundle to a device with a different HOME (different username, e.g. `/Users/alex` instead of `/Users/operator`), Claude Code on the target won't find the transferred sessions because the encoded dirname won't match.
 
 M16.0 handles this by:
 
@@ -86,7 +86,7 @@ Every bundle has a `handoff/manifest.json`:
   "created_at": "2026-05-28T01:23:45Z",
   "source": {
     "device_hostname": "macmini",
-    "home": "/Users/<operator>",
+    "home": "/Users/operator",
     "substrate_version": "0.1.8"
   },
   "included": {
