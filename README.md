@@ -129,7 +129,7 @@ More detail: [`docs/quickstart.md`](docs/quickstart.md)
 
 ## MCP
 
-`v0.1.5` includes the same JSON-RPC 2.0 MCP server over stdio, plus sanitized public examples and release artifacts:
+agent-continuity ships a JSON-RPC 2.0 MCP server over stdio:
 
 ```bash
 agent-continuity mcp serve
@@ -269,6 +269,7 @@ Implemented major arcs:
 - M11: OSS quickstart
 - M12: packaging / release baseline
 - M13: MCP stdio server + integration docs + Python SDK + reference agent
+- M14: multi-project registry CLI, auto-registration, and doctor health check
 - M15: reproducible builds, SBOM, signed release artifacts
 - M16: device-to-device handoff export/import/inspect
 
