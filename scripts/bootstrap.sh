@@ -43,9 +43,11 @@ GITHUB_DL="https://github.com/${REPO}/releases/download"
 #                silently touching third-party app configs.
 
 CONNECT_ALL=0
+NO_VERIFY=0
 for arg in "$@"; do
   case "${arg}" in
     --connect-all) CONNECT_ALL=1 ;;
+    --no-verify) NO_VERIFY=1 ;;
     -h|--help)
       cat <<'EOF'
 bootstrap.sh — one-line install for agent-continuity-layer.
@@ -59,6 +61,12 @@ Flags:
                   to wire Claude Desktop, Cursor, Zed, and thin skills.
                   Without this flag, install is purely substrate-local;
                   wiring is a separate explicit step the operator runs.
+  --no-verify     Skip cosign signature verification of the downloaded
+                  artifacts. STRONGLY DISCOURAGED — provided only as
+                  an emergency escape if the signature infrastructure
+                  is temporarily broken. Use of this flag downgrades
+                  the install integrity story to sha256-only (corruption
+                  detection but no publisher identity verification).
   -h, --help      This message.
 EOF
       exit 0
@@ -120,10 +128,89 @@ curl -fsSL -o "${TARBALL_NAME}" "${GITHUB_DL}/${TAG}/${TARBALL_NAME}"
 echo "==> downloading ${SHA_NAME}"
 curl -fsSL -o "${SHA_NAME}" "${GITHUB_DL}/${TAG}/${SHA_NAME}"
 
-echo "==> verifying sha256 (corruption check — not publisher signature)"
+echo "==> verifying sha256 (transport corruption check)"
 if ! "${SHA_TOOL[@]}" "${SHA_NAME}"; then
   echo "error: sha256 mismatch — aborting before any install write" >&2
   exit 1
+fi
+
+# ────────────────────────────────────────────────────────────────
+# M15.3: cosign signature verification.
+#
+# v0.2.0+ releases are signed via GitHub Actions keyless OIDC. The
+# signature ties the artifact to THIS repo's release workflow.
+# Without verification an attacker who compromises the release
+# infrastructure (or anyone with write access to the repo) could
+# substitute a malicious tarball + matching sha256.
+#
+# We require cosign by default. Operators who genuinely need to
+# bypass (cosign unavailable, infrastructure broken) can pass
+# --no-verify, which downgrades to sha256-only with a loud warning.
+#
+# Pre-v0.2.0 tags are NOT signed; if the resolved latest tag is
+# below v0.2.0 we skip verification with a note (backward compat).
+
+# Crude semver compare: extract major.minor and refuse on < 0.2.
+_version_at_least_020() {
+  local v="$1"
+  # Strip pre-release suffixes if any (-alpha, -rc, etc.)
+  v="${v%%-*}"
+  IFS='.' read -r major minor _patch <<<"${v}"
+  if [ "${major:-0}" -gt 0 ]; then return 0; fi
+  if [ "${major:-0}" -eq 0 ] && [ "${minor:-0}" -ge 2 ]; then return 0; fi
+  return 1
+}
+
+if _version_at_least_020 "${VERSION}"; then
+  if [ "${NO_VERIFY}" = "1" ]; then
+    cat >&2 <<EOF
+==> WARNING: --no-verify is set; SKIPPING cosign signature verification.
+    Integrity story is downgraded to sha256-only (transport corruption
+    detection but no publisher identity). DO NOT use --no-verify in
+    production. This flag exists only for emergency escapes.
+EOF
+  elif ! command -v cosign >/dev/null 2>&1; then
+    cat >&2 <<EOF
+error: cosign is not installed. v0.2.0+ releases require cosign for
+       signature verification.
+
+       Install cosign:
+         macOS:  brew install cosign
+         linux:  see https://docs.sigstore.dev/cosign/installation/
+
+       Or use --no-verify to skip verification (downgrades integrity
+       to sha256-only; not recommended).
+EOF
+    exit 1
+  else
+    echo "==> verifying cosign signatures (publisher identity)"
+    # Identity that must match the cert in the .crt file: this repo's
+    # release workflow on a v* tag. The regex pins all three: repo,
+    # workflow file path, ref pattern.
+    EXPECTED_IDENTITY_REGEX='^https://github\.com/KING-MOM/agent-continuity-layer/\.github/workflows/release\.yml@refs/tags/v.*$'
+    EXPECTED_OIDC_ISSUER='https://token.actions.githubusercontent.com'
+
+    # Download sig + cert for the tarball
+    for asset in "${TARBALL_NAME}" "${SHA_NAME}"; do
+      curl -fsSL -o "${asset}.sig" "${GITHUB_DL}/${TAG}/${asset}.sig"
+      curl -fsSL -o "${asset}.crt" "${GITHUB_DL}/${TAG}/${asset}.crt"
+      if ! cosign verify-blob \
+            --certificate "${asset}.crt" \
+            --signature "${asset}.sig" \
+            --certificate-identity-regexp "${EXPECTED_IDENTITY_REGEX}" \
+            --certificate-oidc-issuer "${EXPECTED_OIDC_ISSUER}" \
+            "${asset}" >/dev/null 2>&1; then
+        echo "error: cosign signature verification FAILED for ${asset}" >&2
+        echo "       expected identity regex: ${EXPECTED_IDENTITY_REGEX}" >&2
+        echo "       expected OIDC issuer:    ${EXPECTED_OIDC_ISSUER}" >&2
+        echo "       refusing to install. Use --no-verify ONLY in an emergency." >&2
+        exit 1
+      fi
+      echo "    ${asset}: cosign signature valid"
+    done
+  fi
+else
+  echo "==> skipping cosign verification (${TAG} predates signed releases)"
 fi
 
 echo "==> extracting"

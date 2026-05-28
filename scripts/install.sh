@@ -158,10 +158,58 @@ cmd_install() {
     return 1
   fi
 
-  echo "verifying integrity (sha256, corruption check only — not publisher signature)"
+  echo "verifying integrity (sha256, transport corruption check)"
   if ! _verify_sha256 "${sha_file}" "${tarball_dir}"; then
     echo "error: sha256 verification failed — tarball is corrupt or .sha256 mismatched" >&2
     return 1
+  fi
+
+  # M15.3: cosign signature verification when signature files are
+  # present alongside the tarball. This is the path used by bootstrap
+  # (which downloads .sig and .crt from the release) AND by manual
+  # operators who downloaded a signed release locally.
+  #
+  # If no .sig/.crt is present, we assume this is a local-build install
+  # (release.sh build on the operator's own machine, no signing
+  # infrastructure) and proceed without signature verification. The
+  # operator who downloaded a signed release manually and forgot to
+  # also download the .sig is the only loose end; that's a UX bug
+  # to surface in docs, not a security gap install.sh can close.
+  local tarball_sig="${tarball_dir}/${tarball_base}.sig"
+  local tarball_crt="${tarball_dir}/${tarball_base}.crt"
+  if [ -f "${tarball_sig}" ] && [ -f "${tarball_crt}" ]; then
+    if ! command -v cosign >/dev/null 2>&1; then
+      cat >&2 <<EOF
+error: cosign signatures are present (${tarball_base}.sig + .crt) but
+       cosign is not installed. The release is signed and refusing to
+       install without verification would be safer than skipping.
+
+       Install cosign:
+         macOS:  brew install cosign
+         linux:  see https://docs.sigstore.dev/cosign/installation/
+
+       Or remove the .sig/.crt files alongside the tarball to skip
+       signature verification (downgrades to sha256-only; not
+       recommended for production).
+EOF
+      return 1
+    fi
+    echo "verifying cosign signature (publisher identity via sigstore keyless OIDC)"
+    local expected_identity_regex='^https://github\.com/KING-MOM/agent-continuity-layer/\.github/workflows/release\.yml@refs/tags/v.*$'
+    local expected_oidc_issuer='https://token.actions.githubusercontent.com'
+    if ! ( cd "${tarball_dir}" && cosign verify-blob \
+            --certificate "${tarball_base}.crt" \
+            --signature "${tarball_base}.sig" \
+            --certificate-identity-regexp "${expected_identity_regex}" \
+            --certificate-oidc-issuer "${expected_oidc_issuer}" \
+            "${tarball_base}" >/dev/null 2>&1 ); then
+      echo "error: cosign signature verification FAILED for ${tarball_base}" >&2
+      echo "       expected identity regex: ${expected_identity_regex}" >&2
+      echo "       expected OIDC issuer:    ${expected_oidc_issuer}" >&2
+      echo "       refusing to install." >&2
+      return 1
+    fi
+    echo "  signature valid"
   fi
 
   # Extract to tempdir so we can read VERSION before placing. EXIT

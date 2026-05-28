@@ -38,9 +38,17 @@ The substrate keeps that state in explicit files and schemas instead of buried c
 
 The decision log is append-only JSONL. Each decision has a deterministic sha256 content ID, so duplicate writes collapse cleanly and future records can refer to `decision:<id>`. Worker tasks keep an audit trail for every state transition. Context snapshots are derived and regeneratable; the operator-maintained pin is the small piece of judgment that travels between sessions.
 
-Current limit: release checksums detect transport corruption, not publisher identity; adapter identities are descriptive, not cryptographic signatures. Signed releases and cryptographic identity are future trust milestones.
+Starting with v0.2.0, release artifacts are signed with cosign keyless OIDC (sigstore) — the install path verifies signatures before extracting. Adapter identities remain descriptive, not cryptographic, in v0.x; that's a future trust milestone.
 
 ## Install
+
+**Prerequisite (v0.2.0+):** install [cosign](https://github.com/sigstore/cosign) for release signature verification:
+
+```bash
+brew install cosign   # macOS; see sigstore.dev/install for linux
+```
+
+The install scripts verify each release artifact against this repo's release-workflow OIDC identity before extracting. v0.1.x releases were unsigned and bootstrap auto-skips verification on those tags.
 
 **One command, install + wire to all your local agents:**
 

@@ -1,6 +1,6 @@
 # Project Context Snapshot
 
-_Generated: 2026-05-28T05:12:00Z from 4297ad20d0f51cd8b59051f41b6ea206016dda1b_
+_Generated: 2026-05-28T05:31:24Z from 0f363b3ee7269a6edad619a8ad3fa5e3b5e07d4a_
 
 > This is a generated snapshot. Do not edit by hand — run `scripts/context.sh --write` to refresh. The one operator-maintained field is `next_safe_action`, sourced from `core/context-pinned.json`.
 
@@ -10,11 +10,11 @@ _Generated: 2026-05-28T05:12:00Z from 4297ad20d0f51cd8b59051f41b6ea206016dda1b_
 - **Charter**: Durable continuity for AI agents across sessions, tools, devices, and model providers.
 - **Repo**: `~/.openclaw/workspace/agent-continuity-layer`
 - **Branch**: `main`
-- **HEAD**: `4297ad20d0f51cd8b59051f41b6ea206016dda1b`
+- **HEAD**: `0f363b3ee7269a6edad619a8ad3fa5e3b5e07d4a`
 
 ## Milestone State
 
-- **Last completed**: M15.1
+- **Last completed**: M16.0
 - **Next major milestone** (per roadmap): (none listed beyond last_completed)
 - **Milestone rule**: Every milestone must strengthen at least one charter continuity primitive; delegation-only work belongs in adapters.
 
@@ -22,7 +22,7 @@ _The roadmap tracks majors only. The next concrete sub-slice (e.g. M7.1) lives i
 
 ## Next Safe Action
 
-First slice of M16 (device-to-device handoff) shipped: `agent-continuity handoff export/import/inspect` packages substrate state (decisions, registry, trust policy, queue) and optionally Claude Code session transcripts into a tar.gz. Default export is state-only; --include-claude opts into transcript transfer with a path-encoding guard that skips claude restoration when source HOME != target HOME. Import backs up existing state under XDG_DATA_HOME unless --no-backup. New M-arc separate from M15 release-integrity (which still has M15.2 SBOM + M15.3 cosign signed releases pending). Next slices to choose between: M15.2 SBOM (Tier 1 enterprise readiness), M15.3 cosign (closes Tier 1; bumps to v0.2.0), or cross-username Claude path rewrite as a follow-up to this slice. M14.1 cross-project queries still pinned as future.
+Final slice of the M15 release-integrity arc shipped: cosign keyless OIDC signed releases via GitHub Actions workflow at .github/workflows/release.yml. Bumping to v0.2.0 because the install path changed (breaking): bootstrap.sh and install.sh now require cosign to verify signatures by default, refusing without --no-verify escape. Workflow triggers on v* tag push, builds tarball + sha256 + SBOM, signs each (plus bootstrap.sh) with cosign keyless OIDC, creates the GitHub Release with all signed artifacts. Tier 1 enterprise readiness items now ALL closed: LICENSE, CONTRIBUTING, SECURITY.md, versioning policy, reproducible builds, CycloneDX SBOM, signed releases. Next active arc choices: M14.1 cross-project queries, M16.1 cross-username Claude path rewrite, or production-readiness Tier 2/3 (multi-tenant trust, cryptographic adapter identity, tamper-evident decision log) — but those require commercial entity + team + capital, not technical work alone.
 
 ## Navigation
 
@@ -67,9 +67,9 @@ _No open tasks._
 
 | sha | milestone | primitive | subject |
 |---|---|---|---|
-| `4297ad2` | — | — | docs: add security and versioning policy |
-| `9e512ef` | — | — | release: v0.1.7 |
-| `30bb5cd` | M15.1 | — | M15.1 polish: smoke verifies reproducibility + docs explain how to verify |
-| `f7ae48e` | M15.1 | — | M15.1: reproducible builds — deterministic tarballs via _repro_tar.py |
-| `2f9c295` | M15.0 | — | M15.0: SECURITY.md + versioning policy — release integrity arc opens |
+| `0f363b3` | — | — | release: v0.1.9 |
+| `296fa35` | M15.2 | — | M15.2: CycloneDX 1.5 SBOM per release |
+| `9661da3` | — | — | release: v0.1.8 |
+| `51d390f` | M16.0 | — | M16.0: device-to-device handoff — export/import/inspect |
+| `4819121` | — | — | release: v0.1.7 |
 

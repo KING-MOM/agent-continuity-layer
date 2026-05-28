@@ -1,0 +1,163 @@
+# M15.3: signed release workflow.
+#
+# Triggers when a vX.Y.Z tag is pushed. Builds the substrate's release
+# artifacts (tarball + sha256 + CycloneDX SBOM), signs each one with
+# cosign keyless OIDC (sigstore), and attaches everything to the
+# corresponding GitHub Release.
+#
+# What gets signed:
+#   - agent-continuity-vX.Y.Z.tar.gz
+#   - agent-continuity-vX.Y.Z.sha256
+#   - agent-continuity-vX.Y.Z.cdx.json
+#   - bootstrap.sh
+# Each gets a sibling .sig and .crt produced by cosign. Consumers
+# verify with `cosign verify-blob --certificate ... --signature ...`.
+#
+# Keyless identity that consumers must validate against:
+#   --certificate-identity-regexp = ^https://github\.com/KING-MOM/agent-continuity-layer/\.github/workflows/release\.yml@refs/tags/v.*$
+#   --certificate-oidc-issuer     = https://token.actions.githubusercontent.com
+#
+# That regex pins the signature to THIS workflow file in THIS repo,
+# on a v* tag ref. An attacker who got hold of any other OIDC identity
+# (different repo, different workflow file, different ref pattern)
+# cannot produce a signature that verifies against this identity.
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  # required to create / update the GitHub Release
+  contents: write
+  # required for cosign keyless OIDC signing (sigstore)
+  id-token: write
+
+jobs:
+  build-sign-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history for `git log -1 --format=%ct`
+                           # which release.sh uses for SOURCE_DATE_EPOCH
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Read release version from tag
+        id: ver
+        run: |
+          # Strip leading 'v' from the tag name → 0.2.0
+          version="${GITHUB_REF_NAME#v}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # Sanity: must match core/VERSION
+          file_version="$(cat core/VERSION | head -1 | tr -d '[:space:]')"
+          if [ "${version}" != "${file_version}" ]; then
+            echo "::error::tag (${version}) != core/VERSION (${file_version})"
+            exit 1
+          fi
+
+      - name: Build release artifacts (tarball + sha256 + SBOM)
+        run: |
+          chmod +x scripts/release.sh scripts/_repro_tar.py scripts/_sbom.py
+          ./scripts/release.sh build
+          ls -la dist/
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.0'
+
+      - name: Sign release artifacts (keyless OIDC)
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          COSIGN_YES: "true"   # accept sigstore experimental TOS prompts
+        run: |
+          # Sign each artifact. cosign produces a sibling .sig (DER
+          # signature) and .crt (certificate from Fulcio). Both must
+          # be uploaded to the release so consumers can verify offline.
+          for artifact in \
+            "dist/agent-continuity-v${VERSION}.tar.gz" \
+            "dist/agent-continuity-v${VERSION}.sha256" \
+            "dist/agent-continuity-v${VERSION}.cdx.json" \
+            "scripts/bootstrap.sh"
+          do
+            echo "==> signing ${artifact}"
+            cosign sign-blob \
+              --yes \
+              --output-signature "${artifact}.sig" \
+              --output-certificate "${artifact}.crt" \
+              "${artifact}"
+          done
+          ls -la dist/ scripts/bootstrap.sh*
+
+      - name: Generate release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          # Brief release notes. Detailed notes can be edited via the
+          # GitHub UI after the release is created.
+          cat > /tmp/notes.md <<EOF
+          Signed release of agent-continuity-layer.
+
+          ## Verifying
+
+          Install cosign first (\`brew install cosign\` or
+          [sigstore.dev/install](https://docs.sigstore.dev/cosign/installation/)),
+          then:
+
+          \`\`\`bash
+          curl -fsSL -o tarball.tar.gz https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}/agent-continuity-v${VERSION}.tar.gz
+          curl -fsSL -o tarball.sig https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}/agent-continuity-v${VERSION}.tar.gz.sig
+          curl -fsSL -o tarball.crt https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}/agent-continuity-v${VERSION}.tar.gz.crt
+
+          cosign verify-blob \\
+            --certificate tarball.crt \\
+            --signature tarball.sig \\
+            --certificate-identity-regexp '^https://github\\.com/KING-MOM/agent-continuity-layer/\\.github/workflows/release\\.yml@refs/tags/v.*$' \\
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \\
+            tarball.tar.gz
+          \`\`\`
+
+          The bootstrap script does this automatically when cosign is
+          available; see SECURITY.md for details.
+
+          ## Attachments
+
+          Each artifact has a sibling \`.sig\` and \`.crt\`:
+
+          - \`agent-continuity-v${VERSION}.tar.gz\` (+ .sig + .crt)
+          - \`agent-continuity-v${VERSION}.sha256\` (+ .sig + .crt)
+          - \`agent-continuity-v${VERSION}.cdx.json\` (+ .sig + .crt)
+          - \`bootstrap.sh\` (+ .sig + .crt)
+          EOF
+          echo "notes-path=/tmp/notes.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release with signed artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            "dist/agent-continuity-v${VERSION}.tar.gz" \
+            "dist/agent-continuity-v${VERSION}.tar.gz.sig" \
+            "dist/agent-continuity-v${VERSION}.tar.gz.crt" \
+            "dist/agent-continuity-v${VERSION}.sha256" \
+            "dist/agent-continuity-v${VERSION}.sha256.sig" \
+            "dist/agent-continuity-v${VERSION}.sha256.crt" \
+            "dist/agent-continuity-v${VERSION}.cdx.json" \
+            "dist/agent-continuity-v${VERSION}.cdx.json.sig" \
+            "dist/agent-continuity-v${VERSION}.cdx.json.crt" \
+            "scripts/bootstrap.sh" \
+            "scripts/bootstrap.sh.sig" \
+            "scripts/bootstrap.sh.crt" \
+            --title "agent-continuity v${VERSION}" \
+            --notes-file "${{ steps.notes.outputs.notes-path }}" \
+            --latest

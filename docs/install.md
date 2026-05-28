@@ -2,6 +2,27 @@
 
 Two install paths. Both ship the same substrate, both verify integrity the same way; they differ only in how much you eyeball before code runs.
 
+## Prerequisite for v0.2.0+: cosign
+
+Starting with **v0.2.0**, releases are signed with [cosign](https://github.com/sigstore/cosign) (sigstore keyless OIDC). The bootstrap and install scripts verify the signature before extracting anything. Install cosign first:
+
+```bash
+# macOS
+brew install cosign
+
+# linux: see https://docs.sigstore.dev/cosign/installation/
+```
+
+Verifying that cosign is on PATH:
+
+```bash
+cosign version
+```
+
+If cosign is missing when you run the install, the script fails loud with a pointer to this section. There's an emergency `--no-verify` escape on `bootstrap.sh` that downgrades to sha256-only — do not use it in production.
+
+Older v0.1.x releases were not signed; bootstrap auto-skips verification on those tags.
+
 ## One-liner (recommended)
 
 Two variants. Pick based on whether you want bootstrap to also wire your local agents.

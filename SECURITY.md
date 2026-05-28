@@ -72,7 +72,39 @@ Only the latest `v0.1.x` minor is supported with security fixes at this time. Ol
 
 ## What changed in our security posture recently
 
-This file documents the project's current security stance honestly. The trust model has known limits (descriptive adapter identity, single-operator assumption, no signed releases yet). Those limits are tracked in `docs/threat-model.md` and `docs/roadmap.md`, and the work to close them is sequenced as the M15 arc — release integrity & trust. This file will be updated as those gaps close.
+This file documents the project's current security stance honestly. The trust model has known limits (descriptive adapter identity, single-operator assumption). Some are tracked in `docs/threat-model.md` and `docs/roadmap.md`; the M15 release-integrity arc closed the remainder of the release-trust gaps.
+
+## Verifying a release signature
+
+Starting with **v0.2.0**, every GitHub Release artifact (tarball, sha256 file, SBOM, bootstrap.sh) is signed with [cosign](https://github.com/sigstore/cosign) using sigstore keyless OIDC. The signing identity is this repo's release workflow on the release tag; consumers verify by pinning to that identity.
+
+Install cosign first (`brew install cosign` on macOS or see [sigstore.dev/install](https://docs.sigstore.dev/cosign/installation/)). Then:
+
+```bash
+VERSION=0.2.0
+BASE="https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}"
+
+# Download tarball + signature + certificate
+curl -fsSL -o "agent-continuity-v${VERSION}.tar.gz"      "${BASE}/agent-continuity-v${VERSION}.tar.gz"
+curl -fsSL -o "agent-continuity-v${VERSION}.tar.gz.sig"  "${BASE}/agent-continuity-v${VERSION}.tar.gz.sig"
+curl -fsSL -o "agent-continuity-v${VERSION}.tar.gz.crt"  "${BASE}/agent-continuity-v${VERSION}.tar.gz.crt"
+
+# Verify
+cosign verify-blob \
+  --certificate "agent-continuity-v${VERSION}.tar.gz.crt" \
+  --signature "agent-continuity-v${VERSION}.tar.gz.sig" \
+  --certificate-identity-regexp '^https://github\.com/KING-MOM/agent-continuity-layer/\.github/workflows/release\.yml@refs/tags/v.*$' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  "agent-continuity-v${VERSION}.tar.gz"
+```
+
+Exit code 0 means the signature is valid and the artifact was produced by this repo's release workflow on a `v*` tag. Any other identity (different workflow file, different repo, non-tag ref) does not pass.
+
+The same pattern applies to the other signed artifacts: `agent-continuity-v${VERSION}.sha256`, `agent-continuity-v${VERSION}.cdx.json`, and `bootstrap.sh`. Each has a sibling `.sig` and `.crt` on the release page.
+
+The `bootstrap.sh` install path performs this verification automatically when cosign is available. The `install.sh` path performs it when `.sig`/`.crt` files are present alongside the tarball. Use `--no-verify` (in bootstrap only) to bypass in genuine emergencies; it is loud and logged.
+
+Transparency: every signature is logged to the [Rekor transparency log](https://rekor.sigstore.dev/), so the audit trail extends beyond just the GitHub release page. Look up the signature's entry by feeding the `.sig` + `.crt` to `rekor-cli search`.
 
 ## Out-of-band contact
 
