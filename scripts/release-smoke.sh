@@ -197,6 +197,43 @@ t_reproducible_build() {
   return 0
 }
 
+t_sbom_present_and_valid() {
+  # M15.2: every release ships a CycloneDX 1.5 SBOM alongside the
+  # tarball + sha256. Verify it exists, is valid CycloneDX, and
+  # binds to this tarball's hash.
+  local sbom_path="${DIST_DIR}/agent-continuity-v${VERSION}.cdx.json"
+  if [ ! -f "${sbom_path}" ]; then
+    echo "FAIL: SBOM missing: ${sbom_path}"
+    return 1
+  fi
+  if ! python3 -c "
+import json, sys
+sbom = json.load(open('${sbom_path}'))
+assert sbom['bomFormat'] == 'CycloneDX', f'wrong bomFormat: {sbom[\"bomFormat\"]}'
+assert sbom['specVersion'] == '1.5', f'wrong specVersion: {sbom[\"specVersion\"]}'
+assert sbom['metadata']['component']['name'] == 'agent-continuity-layer'
+assert sbom['metadata']['component']['version'] == '${VERSION}', \
+    f'sbom version {sbom[\"metadata\"][\"component\"][\"version\"]} != tarball version ${VERSION}'
+hashes = sbom['metadata']['component'].get('hashes', [])
+assert hashes, 'SBOM has no tarball hash binding'
+assert hashes[0]['alg'] == 'SHA-256', f'expected SHA-256, got {hashes[0][\"alg\"]}'
+# Verify the SBOM's claimed hash matches the actual tarball
+import hashlib
+with open('${TARBALL}', 'rb') as f:
+    actual = hashlib.sha256(f.read()).hexdigest()
+assert hashes[0]['content'] == actual, \
+    f'sbom claims tarball hash {hashes[0][\"content\"]} but actual is {actual}'
+deps = sbom['dependencies'][0]['dependsOn']
+assert 'pkg:generic/bash' in deps and 'pkg:generic/python@3.9' in deps, \
+    f'unexpected deps: {deps}'
+print('  CycloneDX 1.5 valid, hash binding matches tarball')
+" 2>&1; then
+    echo "FAIL: SBOM validation failed"
+    return 1
+  fi
+  return 0
+}
+
 t_install_from_tarball() {
   # Invoke install.sh from the in-repo copy. (For a hostile audit we
   # could extract the tarball's own install.sh and use that, but the
@@ -320,6 +357,7 @@ t_no_writes_outside_temp_home() {
 
 _run_test "artifact present or buildable" t_artifact_present_or_buildable
 _run_test "reproducible build (sha256 stable across rebuilds at same SHA)" t_reproducible_build
+_run_test "CycloneDX 1.5 SBOM present and bound to tarball hash" t_sbom_present_and_valid
 _run_test "install from tarball" t_install_from_tarball
 _run_test "agent-continuity --version" t_cli_version
 _run_test "doctor --human (substrate version present, no path leak)" t_cli_doctor_no_path_leak

@@ -163,6 +163,19 @@ cmd_build() {
   # checksum_file` directly in M12.1).
   printf "%s  %s\n" "${sha}" "${tarball_name}" > "${checksum_path}"
 
+  # M15.2: emit CycloneDX 1.5 SBOM alongside the tarball. The SBOM is
+  # bound to this specific tarball's sha256 via the `metadata.component.
+  # hashes[]` field, so consumers can independently verify the SBOM
+  # belongs to the artifact they're auditing. SBOM itself is
+  # reproducible: same version + commit + SOURCE_DATE_EPOCH → identical
+  # SBOM bytes.
+  local sbom_name="agent-continuity-v${version}.cdx.json"
+  local sbom_path="${DIST_DIR}/${sbom_name}"
+  SOURCE_DATE_EPOCH="${epoch}" python3 "${SCRIPT_DIR}/_sbom.py" \
+    --output "${sbom_path}" \
+    --version "${version}" \
+    --tarball-sha256 "${sha}"
+
   local size_bytes
   size_bytes="$(wc -c < "${tarball_path}" | tr -d '[:space:]')"
 
@@ -172,6 +185,7 @@ cmd_build() {
   echo "  size:     ${size_bytes} bytes"
   echo "  sha256:   ${sha}"
   echo "  checksum: ${checksum_path}"
+  echo "  sbom:     ${sbom_path}"
   echo
   echo "next:"
   echo "  - smoke-test the artifact (M12.4 will automate this)"
