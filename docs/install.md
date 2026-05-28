@@ -94,6 +94,45 @@ What `curl … | bash` loses is exactly that inspection window. If you trust the
 
 Either way, the substrate is honest: the sha256 detects transport corruption, not publisher identity. An attacker who can rewrite the tarball over the same transport can rewrite the bootstrap script and `.sha256` too. Signed releases are a future trust milestone; we do not pretend otherwise.
 
+## Verifying you built from source the same artifact GitHub serves
+
+Starting with v0.1.7 the substrate ships **reproducible builds**: rebuilding the tarball at the same commit produces a byte-identical `.tar.gz`. That means you can independently verify GitHub is serving the same artifact the publisher built.
+
+Recipe:
+
+```bash
+# 1. Clone at the release tag
+git clone --depth 1 --branch v0.1.7 https://github.com/KING-MOM/agent-continuity-layer.git
+cd agent-continuity-layer
+
+# 2. Build locally
+./scripts/release.sh build
+
+# 3. Compute the local sha256
+shasum -a 256 dist/agent-continuity-v0.1.7.tar.gz
+
+# 4. Fetch GitHub's published sha256
+curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/download/v0.1.7/agent-continuity-v0.1.7.sha256
+
+# 5. Compare. The two sha256 values MUST be identical.
+```
+
+If they differ, do not install. Report via GitHub Private Vulnerability Reporting (`SECURITY.md`).
+
+How the determinism works:
+- All tar entries get `SOURCE_DATE_EPOCH` as their mtime (derived from `git log -1 --format=%ct HEAD`).
+- Owner/group set to uid=0, gid=0, empty uname/gname.
+- File modes normalized to `0644` / `0755` based on git's stored mode.
+- Gzip header has no embedded filename and no original mtime.
+
+You can override `SOURCE_DATE_EPOCH` to test against an alternate epoch:
+
+```bash
+SOURCE_DATE_EPOCH=1700000000 ./scripts/release.sh build
+```
+
+But for matching a published release, leave it unset — the script will derive it from the tagged commit, which is what the publisher used.
+
 ## After install: PATH
 
 The install lands the CLI at `$HOME/.local/bin/agent-continuity` (or `$XDG_BIN_HOME/agent-continuity` if you've set that). If `~/.local/bin` is not on your `$PATH`, the install prints a note saying so.

@@ -161,6 +161,42 @@ t_artifact_present_or_buildable() {
   [ -f "${TARBALL}" ] && [ -f "${SHA_FILE}" ]
 }
 
+t_reproducible_build() {
+  # M15.1: rebuilding the tarball at the same SHA must produce a
+  # byte-identical .tar.gz. Without this guarantee a signed release
+  # can't be independently verified — a third party would never get
+  # the same hash to compare the signature against.
+  #
+  # Refuse to run when the working tree is dirty: release.sh itself
+  # would refuse, and we'd be comparing nothing useful.
+  if [ -n "$(cd "${REPO_ROOT}" && git status --porcelain 2>/dev/null | grep -v '^.. dist/')" ]; then
+    echo "skipped: working tree dirty (release.sh refuses; nothing to reproduce)"
+    return 0
+  fi
+  if [ ! -f "${TARBALL}" ] || [ ! -f "${SHA_FILE}" ]; then
+    echo "skipped: no current tarball to compare against"
+    return 0
+  fi
+  local sha_before
+  sha_before="$(awk '{print $1}' "${SHA_FILE}")"
+  echo "current sha256: ${sha_before}"
+  if ! "${REPO_ROOT}/scripts/release.sh" build >/dev/null 2>&1; then
+    echo "FAIL: rebuild failed"
+    return 1
+  fi
+  local sha_after
+  sha_after="$(awk '{print $1}' "${SHA_FILE}")"
+  echo "rebuilt sha256: ${sha_after}"
+  if [ "${sha_before}" != "${sha_after}" ]; then
+    echo "FAIL: rebuild produced a different sha256"
+    echo "  before: ${sha_before}"
+    echo "  after:  ${sha_after}"
+    return 1
+  fi
+  echo "→ byte-identical across rebuilds at the same SHA"
+  return 0
+}
+
 t_install_from_tarball() {
   # Invoke install.sh from the in-repo copy. (For a hostile audit we
   # could extract the tarball's own install.sh and use that, but the
@@ -283,6 +319,7 @@ t_no_writes_outside_temp_home() {
 # Run the tests.
 
 _run_test "artifact present or buildable" t_artifact_present_or_buildable
+_run_test "reproducible build (sha256 stable across rebuilds at same SHA)" t_reproducible_build
 _run_test "install from tarball" t_install_from_tarball
 _run_test "agent-continuity --version" t_cli_version
 _run_test "doctor --human (substrate version present, no path leak)" t_cli_doctor_no_path_leak
