@@ -167,7 +167,7 @@ The items below are deliberately NOT on the v0.1.x roadmap. Documented here so f
 
 ### Cryptographic adapter identity / multi-tenant trust
 
-`docs/trust-policy.md` declares these as design limits for v0.1.x: identity is descriptive (`claude`, `codex`, `openclaw`, `human`), not signed; trust policy is single-operator per-device. Multi-operator and cross-org trust would look meaningfully different from anything we could design speculatively today, so they stay as documented limits, not roadmap promises. If a real customer requirement surfaces, that requirement defines the design.
+`docs/trust-policy.md` declares these as design limits for v0.1.x: identity is descriptive (`claude`, `codex`, `openclaw`, `human`, plus named web model tokens), not signed; trust policy is single-operator per-device. Multi-operator and cross-org trust would look meaningfully different from anything we could design speculatively today, so they stay as documented limits, not roadmap promises. If a real customer requirement surfaces, that requirement defines the design.
 
 ## Guardrail
 

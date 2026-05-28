@@ -82,6 +82,6 @@ You should see `"bundle"` in the list.
 ## See also
 
 - [`../m9-adapter-pattern.md`](../m9-adapter-pattern.md) — adapter pattern spec
-- [`chatgpt-web-bundle.md`](chatgpt-web-bundle.md) — same flow, `adapter: other`
+- [`chatgpt-web-bundle.md`](chatgpt-web-bundle.md) — same flow for ChatGPT, Gemini, Grok, and Kimi
 - [`read-only-auditor.md`](read-only-auditor.md) — bundle without writes
 - [`troubleshooting.md`](troubleshooting.md) — common failures

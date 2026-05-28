@@ -73,7 +73,7 @@ STATES = ("queued", "claimed", "running", "completed", "awaiting-approval",
 LEVELS = ["read-only", "scoped-write", "repo-write", "elevated"]
 KINDS = ["code-change", "code-review", "debug", "research", "explain",
          "test-run", "artifact-generation", "data-extraction", "other"]
-WORKERS = ["claude", "codex"]
+WORKERS = ["claude", "codex", "chatgpt", "gemini", "grok", "kimi"]
 
 # .mjs grant vocabulary (preserved verbatim from agent-worker.mjs).
 MJS_MODES = ["review", "debug", "implement", "research", "explain"]
@@ -121,8 +121,8 @@ def _new_grant_id() -> str:
 #   - allow_kinds: [] — every kind is refused at enqueue
 #   - require_human_approval_for: code-change / repo-write / elevated —
 #     belt-and-braces for the cases where allow_kinds is later relaxed
-#   - allowed_workers: both — keeps both vendors as legitimate worker types
-#     once a repo grant gets added
+#   - allowed_workers: claude + codex only — keeps the historical local
+#     worker defaults. Web model adapters require explicit repo grants
 #   - files_denied: common secret globs so even a relaxed allow_kinds can't
 #     touch .env / *secret* / *credential* without explicit override
 # Operators MUST add a repo grant (or relax the default) before any task can
@@ -585,7 +585,7 @@ def cmd_claim(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     succeeds — the other gets FileNotFoundError because src no longer exists.
 
     Ownership: refuses to claim if task.target.adapter doesn't match --adapter
-    (a codex worker can't take a claude-targeted task and vice versa).
+    (e.g. a codex worker cannot take a chatgpt-targeted task).
 
     Policy: re-verifies trust policy at claim time. If the policy tightened
     between enqueue and claim, the task transitions to rejected with audit
@@ -931,8 +931,10 @@ def cmd_submit(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         next_state = "completed"
 
     # M8.3: worker-submitted decisions[]. Validate the whole batch first,
-    # then write to the decision log BEFORE the task state transition. If
-    # any draft is invalid, the entire submit is rejected and the task
+    # then write to the decision log BEFORE the task state transition. Web model
+    # adapters added after M9 use the same path: task.claimed_by_adapter is
+    # the only authoritative attribution token. If any draft is invalid,
+    # the entire submit is rejected and the task
     # remains in its current state (per M8.3 sign-off: "no partial task
     # completion with broken decision provenance"). Write-order rationale:
     # decisions-first means an OS failure mid-log-write leaves the task
@@ -958,8 +960,8 @@ def cmd_submit(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     draft_decisions = raw_decisions  # None or list (possibly empty)
     appended_ids: list[str] = []
     if draft_decisions:
-        # adapter: the canonical adapter token lives at task.claimed_by_adapter
-        # (one of claude/codex/openclaw/human). task.claimed_by is a longer
+        # adapter: the canonical adapter token lives at task.claimed_by_adapter.
+        # task.claimed_by is a longer
         # descriptive identifier (e.g. 'codex-on-device.local-via-mjs') that
         # would fail the decision-entry adapter enum. M8.3 sign-off framed
         # this as 'derive from task'; the canonical task field on disk is
@@ -1442,7 +1444,7 @@ def main() -> int:
                     help="JSON object of per-task permissions (filesystem, network, can_run_tests, "
                          "dangerous_bypass, timeout_sec). Preserved verbatim onto task.permissions. "
                          "dangerous_bypass=true and network!='off' are refused at enqueue.")
-    en.add_argument("--source-adapter", default="human", choices=["human", "openclaw", "claude", "codex"])
+    en.add_argument("--source-adapter", default="human", choices=["human", "openclaw", "claude", "codex", "chatgpt", "gemini", "grok", "kimi"])
     en.add_argument("--source-actor", default=os.environ.get("USER", "unknown"))
 
     li = sub.add_parser("list", help="List tasks by state")

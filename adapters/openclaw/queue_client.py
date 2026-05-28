@@ -60,7 +60,7 @@ Kind = Literal[
     "test-run", "artifact-generation", "data-extraction", "other",
 ]
 TrustLevel = Literal["read-only", "scoped-write", "repo-write", "elevated"]
-WorkerAdapter = Literal["claude", "codex"]
+WorkerAdapter = Literal["claude", "codex", "chatgpt", "gemini", "grok", "kimi"]
 TaskState = Literal[
     "queued", "claimed", "running", "completed", "awaiting-approval",
     "rejected", "failed", "cancelled",

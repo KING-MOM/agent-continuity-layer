@@ -48,10 +48,10 @@
         { "path": "~/.local/state/agent-continuity/decisions.jsonl", "kind": "host-state", "note": "default; honors $XDG_STATE_HOME. Per-device local log; merged across devices via M10.0 sync." },
         { "path": "$AGENT_CONTINUITY_VM_PATH/state/decisions.jsonl", "kind": "vm", "note": "M10.0: VM-canonical merged copy. Pushed by `scripts/sync.sh push --artifact decisions` and pulled by `scripts/sync.sh pull --artifact decisions`. Global state path ($VM/state/...) is distinct from project-scoped paths ($VM/sessions/{project_uuid}/...) per the M10.0 layout — decisions are not forced into a fake project." }
       ],
-      "writers": ["human", "claude", "codex", "openclaw"],
+      "writers": ["human", "claude", "codex", "openclaw", "chatgpt", "gemini", "grok", "kimi"],
       "readers": ["any"],
       "schema": "core/schemas/decision-entry.schema.json",
-      "ownership_rules": "APPEND-ONLY by design. scripts/decisions.sh offers add + list only — no edit or delete subcommand exists. The only mutation paths are: (a) append a new entry, or (b) destructively `rm` the file outside the CLI. Concurrency is guarded by an exclusive-create lock file (decisions.jsonl.lock) acquired on every add; stale locks must be cleared manually with `rm` if a writer crashed mid-add. Doctor freshness/schema checks land in M8.1. Worker-result integration (workers append decisions automatically from task output) is M8.3. Compaction (rolling-summary of older entries to bound file size) is M8.4."
+      "ownership_rules": "APPEND-ONLY by design. scripts/decisions.sh offers add + list only — no edit or delete subcommand exists. The only mutation paths are: (a) append a new entry, or (b) destructively `rm` the file outside the CLI. Concurrency is guarded by an exclusive-create lock file (decisions.jsonl.lock) acquired on every add; stale locks must be cleared manually with `rm` if a writer crashed mid-add. Doctor freshness/schema checks land in M8.1. Worker-result integration (workers append decisions automatically from task output) is M8.3. Web model adapters (chatgpt/gemini/grok/kimi) write through operator-mediated bundle/MCP paths and the same append-only writer. Compaction (rolling-summary of older entries to bound file size) is M8.4."
     },
     {
       "name": "history.md",
@@ -86,7 +86,7 @@
         { "path": "$XDG_CACHE_HOME/agent-continuity/queue/{state}/{task_id}.json", "kind": "host-cache", "note": "state = queued|claimed|running|completed|awaiting-approval|rejected|failed|cancelled; defaults to ~/.cache/. M11.0: path honors XDG_CACHE_HOME so the quickstart's sandboxed namespace can hold its own fixture queue without colliding with the operator's real one." },
         { "path": "docs/artifacts/{milestone}/{task_id}.json", "kind": "repo", "note": "evidence exports per the M5.2b convention" }
       ],
-      "writers": ["openclaw", "claude", "codex", "human"],
+      "writers": ["openclaw", "claude", "codex", "human", "chatgpt", "gemini", "grok", "kimi"],
       "readers": ["any"],
       "schema": "core/schemas/worker-task.schema.json",
       "ownership_rules": "State transitions are atomic via os.rename. Audit transitions are append-only; never edit past entries. Each worker.sh subcommand is the single authority for one transition (claim, start, submit, approve, reject). See docs/architecture.md."
@@ -98,7 +98,7 @@
       "locations": [
         { "path": "embedded in worker-task-record at task.result", "kind": "host-cache" }
       ],
-      "writers": ["claude", "codex"],
+      "writers": ["claude", "codex", "chatgpt", "gemini", "grok", "kimi"],
       "readers": ["any"],
       "schema": "core/schemas/worker-result.schema.json",
       "ownership_rules": "Validated against worker-result.schema.json on submit. Mika sees this shape verbatim through worker_show via the .mjs bridge. M8.3 decisions[] drafts are validated and appended BEFORE the task state transition by scripts/_decisions.append_entries_from_worker (called from _worker.cmd_submit). Any invalid draft (or non-array `decisions` value, per M8.3.1) rejects the entire submit; the task stays in its current state. M8.3.2: the .mjs bridge (resultSchema() + normalizeWorkerResult() at ~/.openclaw/workspace/scripts/agent-worker.mjs) now carries decisions[] through, so Mika/OpenClaw runner-path tasks self-feed the decision log on submit just like direct worker.sh submit does."
@@ -193,10 +193,10 @@
       "locations": [
         { "path": "<operator-provided / embedded>", "kind": "host-state", "note": "M9.0 defines the schema; instances are typically embedded in adapter-bundle objects, inlined in adapter configs, or hardcoded by built-in adapters. M9.x may pin a conventional path (e.g. ~/.config/agent-continuity/adapters/) once one proves useful." }
       ],
-      "writers": ["human", "openclaw", "claude", "codex"],
+      "writers": ["human", "openclaw", "claude", "codex", "chatgpt", "gemini", "grok", "kimi"],
       "readers": ["any"],
       "schema": "core/schemas/adapter-identity.schema.json",
-      "ownership_rules": "Each adapter publishes its own identity. The identity does NOT authorize writes — existing trust policy on claim/submit/decision-append is the enforcement boundary. Schema-validity is checked at bundle ingest and (M9.3+) by doctor when identities are configured at a conventional path. Capability declarations are descriptive: a host UI uses them to know which operations to surface, but trust policy still gates each write."
+      "ownership_rules": "Each adapter publishes its own identity, including named web model adapters. The identity does NOT authorize writes — existing trust policy on claim/submit/decision-append is the enforcement boundary. Schema-validity is checked at bundle ingest and (M9.3+) by doctor when identities are configured at a conventional path. Capability declarations are descriptive: a host UI uses them to know which operations to surface, but trust policy still gates each write."
     },
     {
       "name": "adapter-bundle",
@@ -205,10 +205,10 @@
       "locations": [
         { "path": "<operator-provided / transient>", "kind": "host-state", "note": "M9.0 defines the envelope schema only. M9.1 introduces scripts/bundle.sh export/ingest CLIs that may pin a conventional directory; until then bundles live wherever the operator places the file." }
       ],
-      "writers": ["human", "openclaw", "claude", "codex"],
+      "writers": ["human", "openclaw", "claude", "codex", "chatgpt", "gemini", "grok", "kimi"],
       "readers": ["any"],
       "schema": "core/schemas/adapter-bundle.schema.json",
-      "ownership_rules": "Bundles are transient envelopes, not persistent memory. M9.1 ships scripts/bundle.sh export/ingest. Ingest validates the envelope schema FIRST, then routes embedded payloads through canonical writers: append_decisions → _decisions.append_entries_from_bundle (M9.1 sibling of M8.3's _from_worker; auto-injects 'bundle:<bundle_id>' ref instead of 'task:<task_id>'); submit_results → worker.sh claim/start/submit on the operator's behalf using worker id 'bundle:<adapter_id>'. Bundles MUST NOT bypass the canonical writer enforcement. Source logs remain append-only; ingest never edits decisions.jsonl or queue files directly. bundle_claim metadata (task_id + sha256 task_hash + exported_at) lets ingest detect any change to the task between export and ingest — including audit/state changes from concurrent claims — and reject the bundle rather than apply stale work."
+      "ownership_rules": "Bundles are transient envelopes, not persistent memory. Web model adapters use bundles as their primary write transport. M9.1 ships scripts/bundle.sh export/ingest. Ingest validates the envelope schema FIRST, then routes embedded payloads through canonical writers: append_decisions → _decisions.append_entries_from_bundle (M9.1 sibling of M8.3's _from_worker; auto-injects 'bundle:<bundle_id>' ref instead of 'task:<task_id>'); submit_results → worker.sh claim/start/submit on the operator's behalf using worker id 'bundle:<adapter_id>'. Bundles MUST NOT bypass the canonical writer enforcement. Source logs remain append-only; ingest never edits decisions.jsonl or queue files directly. bundle_claim metadata (task_id + sha256 task_hash + exported_at) lets ingest detect any change to the task between export and ingest — including audit/state changes from concurrent claims — and reject the bundle rather than apply stale work."
     },
     {
       "name": "context-snapshot",

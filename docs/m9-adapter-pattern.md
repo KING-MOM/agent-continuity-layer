@@ -106,7 +106,13 @@ Adapter values for M9:
 - `codex`
 - `openclaw`
 - `human`
+- `chatgpt`
+- `gemini`
+- `grok`
+- `kimi`
 - `other`
+
+`chatgpt`, `gemini`, `grok`, and `kimi` are web model brands. They are usually `bundle-only`: the operator exports a bundle, the model returns a bundle, and the operator ingests it locally.
 
 Capability values for M9:
 
@@ -120,7 +126,7 @@ Capability values for M9:
 |---|---:|---:|---:|---:|---:|---:|
 | Local CLI (`claude`, `codex`) | yes | yes | yes | yes | yes | yes |
 | OpenClaw / Mika bridge | yes | yes | yes | yes | yes | yes |
-| Web agent | yes | yes | yes | bundle-only | bundle-only | bundle-only |
+| Web agent (`claude`, `chatgpt`, `gemini`, `grok`, `kimi`) | yes | yes | yes | bundle-only | bundle-only | bundle-only |
 | Browser extension | yes | yes | yes | yes, if local API exists | yes, if local API exists | yes, if local API exists |
 | Read-only auditor | yes | yes | yes | no | no | no |
 | MCP client | yes | yes | yes | policy-gated | policy-gated | policy-gated |

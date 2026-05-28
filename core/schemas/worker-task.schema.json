@@ -20,7 +20,7 @@
       "type": "object",
       "required": ["adapter", "actor"],
       "properties": {
-        "adapter": { "type": "string", "enum": ["openclaw", "claude", "codex", "human"] },
+        "adapter": { "type": "string", "enum": ["openclaw", "claude", "codex", "human", "chatgpt", "gemini", "grok", "kimi"] },
         "actor": { "type": "string", "description": "Who/what created this task (e.g. 'mika', 'operator', 'cron:nightly-review')." }
       }
     },
@@ -28,7 +28,7 @@
       "type": "object",
       "required": ["adapter"],
       "properties": {
-        "adapter": { "type": "string", "enum": ["claude", "codex"] },
+        "adapter": { "type": "string", "enum": ["claude", "codex", "chatgpt", "gemini", "grok", "kimi"] },
         "preferred_model": { "type": "string" }
       }
     },

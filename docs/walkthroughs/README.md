@@ -8,7 +8,7 @@ Read [`../m9-adapter-pattern.md`](../m9-adapter-pattern.md) first if you want th
 
 | Walkthrough | When to read it |
 |---|---|
-| [chatgpt-web-bundle.md](chatgpt-web-bundle.md) | You're using ChatGPT (or any non-Anthropic web agent) and the agent has no filesystem or shell. |
+| [chatgpt-web-bundle.md](chatgpt-web-bundle.md) | You're using ChatGPT, Gemini, Grok, or Kimi in a web chat with no filesystem or shell. |
 | [claude-web-bundle.md](claude-web-bundle.md) | You're using Claude.ai web. Same bundle pattern as ChatGPT, different adapter brand. |
 | [codex-local-shell.md](codex-local-shell.md) | You're running Codex (or any local LLM CLI) on a host with shell access. |
 | [mika-openclaw-bridge.md](mika-openclaw-bridge.md) | You're using OpenClaw / Mika. The bridge is one adapter among many — not the center of the system. |

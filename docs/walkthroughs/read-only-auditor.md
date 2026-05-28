@@ -49,7 +49,7 @@ Nothing through the contract. The auditor declaration says `false` for every wri
 
 If your audit finds drift and wants to record a decision about it, the path is **operator-driven, not auditor-driven**: the auditor reports findings as conversation; the operator (a human adapter on the local host) runs `scripts/decisions.sh add` to record. See [`codex-local-shell.md`](codex-local-shell.md) §3 for the recording shape.
 
-This separation is deliberate — bundle ingest rejects `adapter: human` at its brand gate (M9.1 v1 allows only `claude`/`codex` for ingest), so even a "notes-only" return bundle won't ingest. The auditor's voice flows back as conversation, not envelope.
+This separation is deliberate — bundle ingest accepts named worker/web adapter brands, but still rejects `adapter: human` for return bundles. The auditor's voice flows back as conversation, not envelope.
 
 ## 4. What command does the operator run?
 
@@ -104,6 +104,6 @@ Returns the full report. Exit code is `0` on all-OK, `2` on any WARN, `1` on any
 ## See also
 
 - [`../m9-adapter-pattern.md`](../m9-adapter-pattern.md) — adapter pattern spec
-- [`chatgpt-web-bundle.md`](chatgpt-web-bundle.md) — for the auditor-via-web flow
+- [`chatgpt-web-bundle.md`](chatgpt-web-bundle.md) — for web model bundle flows
 - [`codex-local-shell.md`](codex-local-shell.md) — escalating from auditor to writer
 - [`troubleshooting.md`](troubleshooting.md) — common failures

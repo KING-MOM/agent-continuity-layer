@@ -36,8 +36,8 @@
     },
     "adapter": {
       "type": "string",
-      "enum": ["claude", "codex", "openclaw", "human", "other"],
-      "description": "Adapter brand. Aligns with the existing decision-entry and worker-result adapter enums so a single attribution chain works across all writers."
+      "enum": ["claude", "codex", "openclaw", "human", "chatgpt", "gemini", "grok", "kimi", "other"],
+      "description": "Adapter brand. Aligns with the existing decision-entry and worker-task adapter enums so a single attribution chain works across all writers. Web model brands are supported through operator-mediated bundle/MCP transports unless a local adapter exists."
     },
     "display_name": {
       "type": "string",

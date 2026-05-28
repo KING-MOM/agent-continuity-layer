@@ -45,8 +45,14 @@ Adapter identity in v0.1.2 is descriptive:
 - `codex`
 - `openclaw`
 - `human`
+- `chatgpt`
+- `gemini`
+- `grok`
+- `kimi`
 
 Those tokens appear in schemas so records are filterable and attributable. They are not signatures. A local process that can run the CLI under your user account is assumed to be acting inside your operator boundary. Multi-user, cross-org, cryptographic identity is future work.
+
+Web model tokens are normally bundle-mediated: the operator exports a bundle, the model returns a bundle, and the operator ingests it locally. The token makes attribution possible; trust policy still decides whether a task claim/submit is allowed.
 
 ## Safe Defaults
 

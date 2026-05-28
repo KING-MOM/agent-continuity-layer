@@ -53,7 +53,7 @@
         },
         "writers": {
           "type": "array",
-          "description": "Who is allowed to write this artifact. Tokens: 'human' (operator-only), 'openclaw' (Mika/control plane), 'claude'/'codex' (worker adapters), 'any-adapter-with-approval' (any adapter when human-approved). Specific tokens preferred over open ones.",
+          "description": "Who is allowed to write this artifact. Tokens: 'human' (operator-only), 'openclaw' (Mika/control plane), named worker/web adapters, and 'any-adapter-with-approval' (any adapter when human-approved). Specific tokens preferred over open ones.",
           "items": {
             "type": "string",
             "enum": [
@@ -61,6 +61,10 @@
               "openclaw",
               "claude",
               "codex",
+              "chatgpt",
+              "gemini",
+              "grok",
+              "kimi",
               "any-adapter-with-approval"
             ]
           }
@@ -75,6 +79,10 @@
               "openclaw",
               "claude",
               "codex",
+              "chatgpt",
+              "gemini",
+              "grok",
+              "kimi",
               "any-adapter-with-approval",
               "any"
             ]

@@ -35,7 +35,7 @@
           "repo": { "type": "string", "description": "filter to this repo only" },
           "adapter": {
             "type": "string",
-            "enum": ["claude", "codex", "openclaw", "human"],
+            "enum": ["claude", "codex", "openclaw", "human", "chatgpt", "gemini", "grok", "kimi"],
             "description": "filter to this adapter brand only"
           },
           "limit": {
@@ -58,7 +58,7 @@
           "why": { "type": "string", "minLength": 1 },
           "adapter": {
             "type": "string",
-            "enum": ["claude", "codex", "openclaw", "human"],
+            "enum": ["claude", "codex", "openclaw", "human", "chatgpt", "gemini", "grok", "kimi"],
             "description": "adapter brand to attribute this decision to"
           },
           "author": { "type": "string" },
@@ -83,8 +83,8 @@
         "properties": {
           "adapter": {
             "type": "string",
-            "enum": ["claude", "codex"],
-            "description": "M9.2 v1: worker.sh claim's --adapter enum is {claude, codex}; openclaw/human deferred (queue-CLI scope)"
+            "enum": ["claude", "codex", "chatgpt", "gemini", "grok", "kimi"],
+            "description": "worker.sh claim adapter. Local CLI agents use claude/codex; web model brands are normally operator-mediated through bundle/MCP transports and still require matching trust policy."
           },
           "as_adapter_id": {
             "type": "string",

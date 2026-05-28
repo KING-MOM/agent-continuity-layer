@@ -31,7 +31,11 @@
       "type": "string",
       "enum": [
         "codex",
-        "claude"
+        "claude",
+        "chatgpt",
+        "gemini",
+        "grok",
+        "kimi"
       ]
     },
     "summary": {

@@ -19,7 +19,7 @@ claim_task
 submit_result
 ```
 
-Those operations are exposed through shell, MCP stdio, web bundles, the Python SDK, and the OpenClaw/Mika bridge. The repo grew out of production Example Agents workflows, but OpenClaw is one adapter among many, not the center of the project.
+Those operations are exposed through shell, MCP stdio, web bundles, the Python SDK, and the OpenClaw/Mika bridge. Web bundles support Claude, ChatGPT, Gemini, Grok, and Kimi as explicit adapter brands. The repo grew out of production Example Agents workflows, but OpenClaw is one adapter among many, not the center of the project.
 
 ## What It Does
 
@@ -203,7 +203,7 @@ agent-continuity context --json
 agent-continuity decisions list
 agent-continuity quickstart init
 agent-continuity worker list
-agent-continuity bundle export --for-adapter claude-web-demo
+agent-continuity bundle export --for-adapter chatgpt-web-demo
 agent-continuity mcp serve
 agent-continuity reference-agent --dry-run
 agent-continuity migrate --dry-run

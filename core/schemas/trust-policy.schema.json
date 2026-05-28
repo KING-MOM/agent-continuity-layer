@@ -61,7 +61,7 @@
         },
         "allowed_workers": {
           "type": "array",
-          "items": { "type": "string", "enum": ["claude", "codex"] }
+          "items": { "type": "string", "enum": ["claude", "codex", "chatgpt", "gemini", "grok", "kimi"] }
         },
         "files_denied": {
           "type": "array",
@@ -84,7 +84,7 @@
           "type": "string",
           "pattern": "^grant_[A-Za-z0-9_]+$"
         },
-        "worker": { "type": "string", "enum": ["claude", "codex"] },
+        "worker": { "type": "string", "enum": ["claude", "codex", "chatgpt", "gemini", "grok", "kimi"] },
         "repo": { "type": "string" },
         "recursive": { "type": "boolean", "default": false },
         "modes": {

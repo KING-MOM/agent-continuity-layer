@@ -27,7 +27,8 @@ agent-continuity decisions list --adapter codex --limit 1
 ```
 
 The default adapter token is `codex` because the decision-entry schema has a
-small explicit adapter enum: `claude`, `codex`, `openclaw`, `human`. The demo
+small explicit adapter enum: `claude`, `codex`, `openclaw`, `human`,
+`chatgpt`, `gemini`, `grok`, `kimi`. The demo
 sets `author=reference-agent-demo` so readers can tell this was the deterministic
 reference agent, not a real Codex CLI invocation.
 

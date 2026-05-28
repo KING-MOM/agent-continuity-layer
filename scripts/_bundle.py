@@ -28,9 +28,8 @@ Failure modes (ingest):
                                      decision/submit)
   - task already claimed by other    ERROR (race lost — refuse to
                                      overwrite another worker's claim)
-  - adapter brand outside {claude,
-    codex}                           ERROR (M9.1 v1; worker.sh claim's
-                                     --adapter enum constraint)
+  - adapter brand outside the worker-capable set
+                                     ERROR (prevents unverifiable attribution)
   - draft decision invalid           ERROR (no decisions written; no
                                      submits attempted)
 
@@ -66,9 +65,10 @@ _XDG_CACHE_HOME = Path(os.environ.get("XDG_CACHE_HOME") or (HOME / ".cache"))
 QUEUE_ROOT = _XDG_CACHE_HOME / "agent-continuity" / "queue"
 
 BUNDLE_SCHEMA_VERSION = "1.0"
-# M9.1 v1: worker.sh claim's --adapter enum is {claude, codex}.
-# Expanding to openclaw/human is worker-CLI scope, not M9.1.
-BUNDLE_ALLOWED_ADAPTERS: tuple[str, ...] = ("claude", "codex")
+# Bundle ingest accepts worker-capable adapter brands. Web model brands are
+# operator-mediated: they can append decisions or submit returned bundle work
+# only when trust policy allows the matching target adapter.
+BUNDLE_ALLOWED_ADAPTERS: tuple[str, ...] = ("claude", "codex", "chatgpt", "gemini", "grok", "kimi")
 
 # Reuse the canonical schema validator. Doctor stays free of intra-script
 # imports per the M7.2/M8.1 pattern, but new scripts CAN import from
@@ -287,10 +287,10 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     adapter_brand: str = from_adapter["adapter"]
     if adapter_brand not in BUNDLE_ALLOWED_ADAPTERS:
         print(
-            f"error: M9.1 bundle ingest supports adapter brands "
-            f"{list(BUNDLE_ALLOWED_ADAPTERS)} (worker.sh claim --adapter enum "
-            f"constraint); got {adapter_brand!r}. Bundle was authored by an "
-            f"adapter brand outside M9.1's supported set.",
+            f"error: M9 bundle ingest supports adapter brands "
+            f"{list(BUNDLE_ALLOWED_ADAPTERS)} for bundle-mediated writes; "
+            f"got {adapter_brand!r}. Bundle was authored by an adapter brand "
+            f"outside the supported attribution set.",
             file=sys.stderr,
         )
         return 1

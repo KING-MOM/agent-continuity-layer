@@ -1,101 +1,144 @@
-# ChatGPT Web via Bundle (read-only in M9.4)
+# ChatGPT / Gemini / Grok / Kimi Web via Bundle
 
-ChatGPT (or any non-Anthropic web agent without filesystem or shell) joins continuity by reading an operator-exported JSON bundle. Bundles are the operator-mediated transport defined by [M9.1](../m9-adapter-pattern.md#m91---bundle-cli).
+Web model chats join continuity through bundles: the operator exports one JSON object, pastes it into the chat, the agent returns one JSON object, and the operator ingests it. No filesystem, shell, API key, or browser extension is required on the model side.
 
-**Important**: as of M9.4, ChatGPT-web is **read-only via bundle**. The write path is not yet open because the underlying schemas and CLIs don't recognize an OpenAI/ChatGPT brand. See §3 for the specific constraints. Adding write support is M-future work.
+Supported web adapter brands:
+
+- `chatgpt`
+- `gemini`
+- `grok`
+- `kimi`
+
+`claude` web uses the same bundle transport and has its own walkthrough at [`claude-web-bundle.md`](claude-web-bundle.md).
 
 ## 1. What adapter am I?
 
-A `web-agent` per [`core/schemas/adapter-identity.schema.json`](../../core/schemas/adapter-identity.schema.json):
+A `web-agent` per [`core/schemas/adapter-identity.schema.json`](../../core/schemas/adapter-identity.schema.json). For ChatGPT:
 
 ```json
 {
+  "schema_version": "1.0",
+  "adapter_id": "chatgpt-web-2026-05-27-operator",
   "adapter_type": "web-agent",
-  "adapter": "other",
+  "adapter": "chatgpt",
   "display_name": "ChatGPT web session",
   "transport": ["bundle"],
   "capabilities": {
     "whoami": true,
     "read_context": true,
     "read_decisions": true,
-    "append_decision": false,
-    "claim_task": false,
-    "submit_result": false
-  }
+    "append_decision": "bundle-only",
+    "claim_task": "bundle-only",
+    "submit_result": "bundle-only"
+  },
+  "created_at": "2026-05-27T00:00:00Z"
 }
 ```
 
-`adapter: "other"` because the brand enum is `[claude, codex, openclaw, human, other]`; ChatGPT lives under `other` until or unless `openai` is added. The write capabilities are `false` because:
+For Gemini, Grok, or Kimi, change only `adapter_id`, `adapter`, and `display_name`:
 
-- `_bundle.py` ingest only allows `adapter` brand `claude` or `codex` (M9.1 v1 mirror of `worker.sh claim --adapter` enum).
-- `core/schemas/decision-entry.schema.json` adapter enum is `[claude, codex, openclaw, human]` — `other` is not a valid write attribution.
+| Model surface | `adapter` token | Example `adapter_id` |
+|---|---|---|
+| ChatGPT web | `chatgpt` | `chatgpt-web-operator` |
+| Gemini web | `gemini` | `gemini-web-operator` |
+| Grok web | `grok` | `grok-web-operator` |
+| Kimi web | `kimi` | `kimi-web-operator` |
 
-Both constraints would need to relax before a ChatGPT-web write path could exist end-to-end.
+The token is descriptive, not cryptographic. Trust policy still decides whether writes succeed.
 
 ## 2. What can I read?
 
 From the layer-to-adapter bundle the operator pastes into the chat:
 
-- `bundle.context` — the M7 context snapshot (current milestone, next safe action, recent activity)
-- `bundle.decisions` — recent decision-log entries
-- `bundle.task` — at most one task included for review (or null). You cannot *act on* a task in M9.4; you can read it and discuss.
-- `bundle.allowed_operations` — `["read_context", "read_decisions"]` for a read-only bundle (no `--task` on export, or operator overrides explicitly).
+- `bundle.context` — the M7 context snapshot.
+- `bundle.decisions` — recent decision-log entries.
+- `bundle.task` — at most one task included for work, review, or explanation.
+- `bundle.bundle_claim` — task hash + id metadata that lets ingest reject stale returns.
+- `bundle.allowed_operations` — what the operator expects the return bundle to attempt.
+
+Read paths do not require trust grants; the operator chooses what to include in the export.
 
 ## 3. What can I write?
 
-Nothing through the contract in M9.4. If you attempt to return an adapter-to-layer bundle and the operator runs `bundle.sh ingest`, ingest rejects at the brand gate:
+Through a return bundle, web adapters can write two things:
 
-```
-error: M9.1 bundle ingest supports adapter brands ['claude', 'codex'] (worker.sh
-  claim --adapter enum constraint); got 'other'. Bundle was authored by an
-  adapter brand outside M9.1's supported set.
-```
+- `append_decisions[]` — durable decision entries attributed to `chatgpt`, `gemini`, `grok`, or `kimi`.
+- `submit_results[]` — worker results for the exported task, including embedded `result.decisions[]` that flow through the M8.3 writeback path.
 
-To **discuss findings**, return them as conversation (not as a JSON envelope). To **record findings**, the operator (a `human` adapter on the local host) runs `scripts/decisions.sh add` themselves — see [`codex-local-shell.md`](codex-local-shell.md) §3 for the recording shape.
+Writes are still operator-mediated and policy-gated:
 
-To **act on a task**, switch hosts: use [`claude-web-bundle.md`](claude-web-bundle.md) (Claude.ai) or [`codex-local-shell.md`](codex-local-shell.md) (local CLI).
+- The operator must run `bundle.sh ingest` locally.
+- Task submit requires the task target adapter to match the web adapter brand.
+- Trust policy must allow that adapter for the repo/kind/trust level.
+- The export-time task hash must still match the on-disk task at ingest time.
+
+A web chat cannot silently claim work on its own. The bundle is the consent boundary.
 
 ## 4. What command does the operator run?
 
-Export a read-only bundle:
+Export context + recent decisions only:
 
-```
-scripts/bundle.sh export \
-  --for-adapter chatgpt-web-2026-05-26-operator \
+```bash
+agent-continuity bundle export \
+  --for-adapter chatgpt-web-operator \
   --decisions-limit 20 \
-  --out /tmp/bundle-export.json
+  --out /tmp/ac-bundle-export.json
 ```
 
-Omitting `--task` produces a read-only bundle (allowed_operations: read_context + read_decisions only, no `bundle_claim`). The operator pastes the JSON into the chat. **No ingest step.** The bundle round-trip ends after the agent reads it.
+Export a task for a web model to complete:
+
+```bash
+agent-continuity bundle export \
+  --for-adapter chatgpt-web-operator \
+  --task <task_id> \
+  --decisions-limit 20 \
+  --out /tmp/ac-bundle-export.json
+```
+
+Paste `/tmp/ac-bundle-export.json` into the web chat. The model returns an `adapter-to-layer` bundle. Save it and ingest:
+
+```bash
+agent-continuity bundle ingest /tmp/ac-bundle-return.json
+```
+
+Use `gemini-web-operator`, `grok-web-operator`, or `kimi-web-operator` for those surfaces. The `from_adapter.adapter` inside the return bundle must match the intended brand.
 
 ## 5. What artifact comes back?
 
-The exported bundle itself is the artifact. The chat conversation is where the agent's reading + reasoning lives.
+The returned JSON bundle. After ingest, canonical state lives in the same places as every other adapter:
 
-If the agent's reasoning is load-bearing — e.g. they identified a missed decision — the operator records it via `decisions.sh add` on the host, attributing as `--adapter human --author operator` (or whatever the operator's identity is). The web agent's contribution is the conversation; the operator's contribution is the durable record.
+- decisions append to `$XDG_STATE_HOME/agent-continuity/decisions.jsonl`,
+- task transitions append to the worker-task audit trail,
+- worker-result decisions get `task:<task_id>` refs automatically.
+
+The audit trail distinguishes transport with `claimed_by: bundle:<adapter_id>`.
 
 ## 6. What trust boundary applies?
 
-- Read paths don't go through trust policy. The operator chooses what to include in the export; the agent reads it.
-- The brand-gate rejection in §3 is itself a trust signal: the system refuses to attribute writes to an unrecognized adapter brand. That's deliberate — adding `openai` to the enums is an M-future decision that includes deciding what trust policy means for OpenAI-attributed writes.
+Identity is descriptive; trust policy is enforcement. Adding a web model token makes attribution possible, not authority automatic.
+
+Safe default remains conservative: fresh policies do not allow web model adapters. To let a web model complete tasks, the operator must add a repo-scoped policy/grant that includes the matching adapter in `allowed_workers`.
+
+For pure decision append through `append_decisions[]`, ingest still validates the adapter identity, validates every draft, writes through the canonical decision-log writer, and rejects invalid batches all-or-nothing.
 
 ## 7. How do I verify with doctor?
 
+```bash
+agent-continuity doctor --human
 ```
-scripts/doctor.sh
-```
 
-- `m9 adapter portability` → `transports: ... bundle ok ...` confirms `bundle.sh` is reachable for export.
-- `context snapshot` and `decisions log` blocks confirm the data being exported is current.
+Look for:
 
-The doctor does NOT check whether the operator's chosen export `--for-adapter` will pass ingest; that constraint surfaces only at ingest time. M9.4 acknowledges this limitation in this walkthrough.
+- `m9 adapter portability` -> `bundle ok`.
+- `decisions log` -> entries appear after successful ingest.
+- `worker queue` -> task status/audit reflects `bundle:<adapter_id>` after submit.
 
-If something failed, see [troubleshooting.md](troubleshooting.md).
+If ingest rejects, run it again with the same bundle after fixing the policy or task state issue. If the task hash changed, re-export a fresh bundle; stale bundles should not be forced through.
 
 ## See also
 
 - [`../m9-adapter-pattern.md`](../m9-adapter-pattern.md) — adapter pattern spec
-- [`claude-web-bundle.md`](claude-web-bundle.md) — write path open (`adapter: claude`)
-- [`codex-local-shell.md`](codex-local-shell.md) — local write path (`adapter: codex`)
-- [`read-only-auditor.md`](read-only-auditor.md) — explicit read-only stance
+- [`claude-web-bundle.md`](claude-web-bundle.md) — same flow for Claude web
+- [`codex-local-shell.md`](codex-local-shell.md) — local shell-capable worker path
+- [`read-only-auditor.md`](read-only-auditor.md) — explicit no-write auditor stance
 - [`troubleshooting.md`](troubleshooting.md) — common failures

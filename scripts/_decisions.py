@@ -41,7 +41,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = REPO_ROOT / "core" / "schemas" / "decision-entry.schema.json"
 
-ADAPTERS: tuple[str, ...] = ("claude", "codex", "openclaw", "human")
+ADAPTERS: tuple[str, ...] = ("claude", "codex", "openclaw", "human", "chatgpt", "gemini", "grok", "kimi")
 SCHEMA_VERSION = "1.0"
 
 # XDG_STATE_HOME per the XDG Base Directory Spec: durable user state,

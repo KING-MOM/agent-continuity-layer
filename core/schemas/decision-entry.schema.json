@@ -30,8 +30,8 @@
     },
     "adapter": {
       "type": "string",
-      "enum": ["claude", "codex", "openclaw", "human"],
-      "description": "Which adapter wrote this entry. Workers write under their own token; the operator runs `decisions.sh add --adapter human`."
+      "enum": ["claude", "codex", "openclaw", "human", "chatgpt", "gemini", "grok", "kimi"],
+      "description": "Which adapter wrote this entry. Workers write under their own token; web model adapters write through operator-mediated transports; the operator runs `decisions.sh add --adapter human`."
     },
     "author": {
       "type": "string",

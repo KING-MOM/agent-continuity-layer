@@ -103,7 +103,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--adapter",
         default="codex",
-        choices=["claude", "codex", "openclaw", "human"],
+        choices=["claude", "codex", "openclaw", "human", "chatgpt", "gemini", "grok", "kimi"],
         help="decision adapter token to write under (default: codex for local demo)",
     )
     p.add_argument("--author", default="reference-agent-demo", help="decision author label")
