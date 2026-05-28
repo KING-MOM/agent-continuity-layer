@@ -1,0 +1,45 @@
+{
+  "dry_run": true,
+  "trusted": false,
+  "grant_id": null,
+  "command": "codex",
+  "executable": "/Applications/Codex.app/Contents/Resources/codex",
+  "args": [
+    "exec",
+    "--ephemeral",
+    "--sandbox",
+    "read-only",
+    "--cd",
+    "/Users/<operator>/.openclaw/workspace/m4-fixture",
+    "--output-schema",
+    "/Users/<operator>/.openclaw/workspace/worker-tasks/schemas/worker-result.schema.json",
+    "--output-last-message",
+    "/Users/<operator>/.openclaw/workspace/worker-tasks/logs/task_20260525033952_zdsxu4.result.json",
+    "You are a terminal-based worker delegated by Mika/OpenClaw for the operator.\n\nTask JSON:\n{\n  \"task_id\": \"task_20260525033952_zdsxu4\",\n  \"worker\": \"codex\",\n  \"mode\": \"research\",\n  \"repo\": \"/Users/<operator>/.openclaw/workspace/m4-fixture\",\n  \"goal\": \"M5.2b baseline shape capture — do not execute\",\n  \"permissions\": {\n    \"filesystem\": \"read_only\",\n    \"network\": \"off\",\n    \"can_edit\": false,\n    \"can_run_tests\": false,\n    \"dangerous_bypass\": false\n  },\n  \"expected_output\": {\n    \"summary\": \"short Spanish summary suitable for Mika to relay to the operator\",\n    \"findings\": [],\n    \"changed_files\": [],\n    \"tests_run\": [],\n    \"needs_human\": []\n  },\n  \"status\": \"queued\",\n  \"created_at\": \"2026-05-25T03:39:52.890Z\",\n  \"updated_at\": \"2026-05-25T03:39:52.890Z\",\n  \"timeout_sec\": 900\n}\n\nOperating rules:\n- Complete only the requested task.\n- Respect permissions exactly.\n- filesystem=read_only means do not edit files, do not apply patches, do not write repo files.\n- network=off means do not browse or call external networks.\n- Do not ask the end user questions unless truly blocked; put blockers in needs_human.\n- Do not claim you changed, tested, deployed, merged, sent, purchased, or confirmed anything unless there is evidence in this run.\n- Prefer concrete file paths, commands observed, and specific findings.\n- Final answer must match the provided JSON schema. No markdown outside JSON.\n- Set worker to \"codex\" and task_id to \"task_20260525033952_zdsxu4\".\n"
+  ],
+  "task": {
+    "task_id": "task_20260525033952_zdsxu4",
+    "worker": "codex",
+    "mode": "research",
+    "repo": "/Users/<operator>/.openclaw/workspace/m4-fixture",
+    "goal": "M5.2b baseline shape capture — do not execute",
+    "permissions": {
+      "filesystem": "read_only",
+      "network": "off",
+      "can_edit": false,
+      "can_run_tests": false,
+      "dangerous_bypass": false
+    },
+    "expected_output": {
+      "summary": "short Spanish summary suitable for Mika to relay to the operator",
+      "findings": [],
+      "changed_files": [],
+      "tests_run": [],
+      "needs_human": []
+    },
+    "status": "queued",
+    "created_at": "2026-05-25T03:39:52.890Z",
+    "updated_at": "2026-05-25T03:39:52.890Z",
+    "timeout_sec": 900
+  }
+}

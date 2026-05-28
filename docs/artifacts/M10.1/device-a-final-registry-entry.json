@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "uuid": "proj-m101-test-001",
+  "name": "Updated name from B",
+  "description": "M10.1 smoke",
+  "created_at": "2026-05-26T16:00:00Z",
+  "last_active": "2026-05-26T17:00:00Z",
+  "last_writer_device": "device-b",
+  "last_writer_ts": "2026-05-26T17:00:00Z",
+  "last_device": "device-a",
+  "last_interface": "claude-code",
+  "repos": [
+    {
+      "origin": "git@example.com:org/m101-test-repo.git",
+      "observed_paths": [
+        {
+          "device_id": "device-a",
+          "path": "/Users/<operator>/repo",
+          "observed_at": "2026-05-26T16:00:00Z"
+        },
+        {
+          "device_id": "device-b",
+          "path": "/home/operator-on-b/repo",
+          "observed_at": "2026-05-26T17:00:00Z"
+        }
+      ]
+    }
+  ]
+}

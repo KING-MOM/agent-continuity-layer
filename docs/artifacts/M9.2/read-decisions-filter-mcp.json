@@ -1,0 +1,13 @@
+[
+  {
+    "schema_version": "1.0",
+    "ts": "2026-05-26T02:54:59Z",
+    "adapter": "claude",
+    "repo": "agent-continuity-layer",
+    "decision": "Second decision",
+    "why": "Verify --adapter filter",
+    "refs": [],
+    "author": "mcp-test",
+    "id": "8d55799d439d82aba45baf4e8db29a067ac8b8c1412a024d249c702b9d35db60"
+  }
+]

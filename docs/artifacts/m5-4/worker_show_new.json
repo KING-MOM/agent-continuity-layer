@@ -1,0 +1,41 @@
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"ok\": true,\n  \"task_id\": \"task_63ad7a70cfb2\",\n  \"task\": {\n    \"state\": \"pending\",\n    \"task_id\": \"task_63ad7a70cfb2\",\n    \"worker\": \"codex\",\n    \"mode\": \"research\",\n    \"repo\": \"/Users/<operator>/.openclaw/workspace/agent-continuity-layer\",\n    \"goal\": \"M5.4 MCP smoke — count lines in CHARTER.md (read-only, do not execute beyond a dry-run inspection)\",\n    \"permissions\": {\n      \"filesystem\": \"read_only\",\n      \"network\": \"off\",\n      \"can_edit\": false,\n      \"can_run_tests\": false,\n      \"dangerous_bypass\": false\n    },\n    \"expected_output\": {\n      \"summary\": \"short Spanish summary suitable for Mika to relay to the operator\",\n      \"findings\": [],\n      \"changed_files\": [],\n      \"tests_run\": [],\n      \"needs_human\": []\n    },\n    \"status\": \"pending\",\n    \"created_at\": \"2026-05-25T14:52:26Z\",\n    \"updated_at\": \"2026-05-25T14:52:26Z\",\n    \"timeout_sec\": 900\n  }\n}"
+      }
+    ],
+    "details": {
+      "ok": true,
+      "task_id": "task_63ad7a70cfb2",
+      "task": {
+        "state": "pending",
+        "task_id": "task_63ad7a70cfb2",
+        "worker": "codex",
+        "mode": "research",
+        "repo": "/Users/<operator>/.openclaw/workspace/agent-continuity-layer",
+        "goal": "M5.4 MCP smoke — count lines in CHARTER.md (read-only, do not execute beyond a dry-run inspection)",
+        "permissions": {
+          "filesystem": "read_only",
+          "network": "off",
+          "can_edit": false,
+          "can_run_tests": false,
+          "dangerous_bypass": false
+        },
+        "expected_output": {
+          "summary": "short Spanish summary suitable for Mika to relay to the operator",
+          "findings": [],
+          "changed_files": [],
+          "tests_run": [],
+          "needs_human": []
+        },
+        "status": "pending",
+        "created_at": "2026-05-25T14:52:26Z",
+        "updated_at": "2026-05-25T14:52:26Z",
+        "timeout_sec": 900
+      }
+    }
+  },
+  "elapsed_ms": 87
+}

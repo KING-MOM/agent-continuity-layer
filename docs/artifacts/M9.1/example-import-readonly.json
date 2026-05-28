@@ -1,0 +1,108 @@
+{
+  "schema_version": "1.0",
+  "bundle_id": "bundle-20260526T024123Z-91e782f9",
+  "direction": "layer-to-adapter",
+  "created_at": "2026-05-26T02:41:23Z",
+  "for_adapter": {
+    "adapter_id": "claude-web-m91-smoke"
+  },
+  "allowed_operations": [
+    "read_context",
+    "read_decisions"
+  ],
+  "context": {
+    "schema_version": "1.0",
+    "generated_at": "2026-05-26T01:53:13Z",
+    "source_head_sha": "1c227324c9efea6891fca04f52dceb8f723670eb",
+    "identity": {
+      "name": "agent-continuity-layer",
+      "charter_one_line": "Durable continuity for AI agents across sessions, tools, devices, and model providers.",
+      "repo_path": "/Users/<operator>/.openclaw/workspace/agent-continuity-layer",
+      "branch": "main"
+    },
+    "milestone": {
+      "last_completed": "M8.4",
+      "last_completed_primitive": "decision log",
+      "next_major_milestone": {
+        "present": true,
+        "tag": "M9",
+        "label": "Web/Local Agent Adapter Pattern"
+      },
+      "milestone_rule": "Every milestone must strengthen at least one charter continuity primitive; delegation-only work belongs in adapters."
+    },
+    "navigation": {
+      "charter": "CHARTER.md",
+      "roadmap": "docs/roadmap.md",
+      "architecture": "docs/architecture.md",
+      "handoff_vs_continuity": "docs/handoff-vs-continuity.md",
+      "milestone_template": "docs/milestone-template.md"
+    },
+    "non_goals": [
+      "This is not only an OpenClaw plugin.",
+      "This is not only a worker queue.",
+      "This is not an autonomous-agent runner.",
+      "This does not make the VM a config authority.",
+      "This does not give agents broad write authority without trust policy and audit."
+    ],
+    "work_in_flight": {
+      "queue_present": true,
+      "queue_counts": {
+        "queued": 0,
+        "claimed": 0,
+        "running": 0,
+        "awaiting-approval": 0,
+        "completed": 1,
+        "rejected": 1,
+        "failed": 0,
+        "cancelled": 0
+      },
+      "open_tasks": {
+        "queued": [],
+        "claimed": [],
+        "running": [],
+        "awaiting-approval": []
+      }
+    },
+    "trust": {
+      "policy_present": true,
+      "grants_count": 1,
+      "default_policy_summary": "default allows 4 kind(s): code-review, data-extraction, explain, research",
+      "soonest_expiry": "2026-06-01T23:59:59Z"
+    },
+    "recent_activity": [
+      {
+        "sha": "1c22732",
+        "subject": "M8.4: decisions log compaction — derived view, never mutates source",
+        "milestone": "M8.4",
+        "primitive": "decision log"
+      },
+      {
+        "sha": "407e4ee",
+        "subject": "M8.3.2: .mjs bridge carries decisions[] end-to-end",
+        "milestone": "M8.3.2",
+        "primitive": "decision log"
+      },
+      {
+        "sha": "0e0f03f",
+        "subject": "fix(M8.3.1): reject present-but-non-array decisions; correct schema doc",
+        "milestone": "M8.3.1",
+        "primitive": "decision log"
+      },
+      {
+        "sha": "41e4f82",
+        "subject": "M8.3: worker-result decisions[] flow into the canonical log on submit",
+        "milestone": "M8.3",
+        "primitive": "decision log"
+      },
+      {
+        "sha": "812c738",
+        "subject": "fix(M8.2.1): check_context_pin uses leading-tag only, not body refs",
+        "milestone": "M8.2.1",
+        "primitive": "decision log"
+      }
+    ],
+    "next_safe_action": "M9.1 (bundle CLI): scripts/bundle.sh export --for <adapter-id> and scripts/bundle.sh ingest <bundle.json>. Export packages context + filtered decisions + optional task + allowed operations into a single adapter-bundle JSON object the operator can paste into a web agent's chat surface. Ingest validates the envelope first, then routes append_decisions through the canonical decision writer and submit_results through worker.sh submit. Per the M9 spec: bundles never bypass existing writer enforcement, and source logs remain append-only. Evidence artifact should demonstrate a round trip with a fake web adapter."
+  },
+  "decisions": [],
+  "task": null
+}

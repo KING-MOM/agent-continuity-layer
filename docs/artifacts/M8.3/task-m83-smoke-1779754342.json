@@ -1,0 +1,71 @@
+{
+  "schema_version": "1.0",
+  "id": "task-m83-smoke-1779754342",
+  "project_uuid": "proj-m83-test",
+  "kind": "research",
+  "target": {
+    "adapter": "claude"
+  },
+  "trust_level": "read-only",
+  "status": "completed",
+  "created_at": "2026-05-26T00:12:22Z",
+  "claimed_at": "2026-05-26T00:12:22Z",
+  "claimed_by": "claude-on-m83-smoke",
+  "claimed_by_adapter": "claude",
+  "source": {
+    "adapter": "human",
+    "actor": "operator"
+  },
+  "input": {
+    "instruction": "M8.3 smoke",
+    "repo": "agent-continuity-layer"
+  },
+  "audit": {
+    "transitions": [
+      {
+        "from": "queued",
+        "to": "claimed",
+        "at": "2026-05-26T00:12:22Z",
+        "by": "claude"
+      },
+      {
+        "at": "2026-05-26T00:12:22Z",
+        "from": "claimed",
+        "to": "completed",
+        "by": "claude-on-m83-smoke"
+      }
+    ]
+  },
+  "result": {
+    "task_id": "task-m83-smoke-1779754342",
+    "status": "done",
+    "worker": "claude",
+    "summary": "M8.3 smoke test result",
+    "root_cause": null,
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": [],
+    "artifacts": [],
+    "decisions": [
+      {
+        "decision": "Smoke A",
+        "why": "Verifying decisions[] flows through submit"
+      },
+      {
+        "decision": "Smoke B",
+        "why": "Verifying auto-injected task ref and dedupe",
+        "refs": [
+          "task:task-m83-smoke-1779754342",
+          "M8.3",
+          "doc:scripts/_decisions.py"
+        ]
+      }
+    ],
+    "appended_decision_ids": [
+      "44a3252de429c2f8c02fa55c5dc651eecb3bad4a823f741552d9001a416a55e5",
+      "4c72ce125e3c217b7d0fcee8a4c394a5f8782fc1c6ee91dc34663a15ecd58c0f"
+    ]
+  },
+  "completed_at": "2026-05-26T00:12:22Z"
+}

@@ -1,0 +1,2 @@
+{"schema_version": "1.0", "ts": "2026-05-26T16:15:26Z", "adapter": "human", "repo": "r-test", "decision": "A1: device-A first decision", "why": "from device A baseline", "refs": [], "author": "operator", "id": "502b7f6ae961fcf5145218460924cd7d9b0540009aa2f7bb6b6983f3a0886257"}
+{"schema_version": "1.0", "ts": "2026-05-26T16:15:26Z", "adapter": "human", "repo": "r-test", "decision": "B1: device-B first decision", "why": "from device B baseline", "refs": [], "author": "operator", "id": "faa47212d432fbf950de6ac75132933e8dd0a77a8ed0f337dc379053539fc83f"}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/device-identity.json",
+  "title": "Device Identity",
+  "description": "M10.0 per-device descriptor for multi-device sync. Stored at $XDG_CONFIG_HOME/agent-continuity/device-identity.json (defaults to ~/.config/...). Generated on the first push/pull invocation if absent. DISTINCT from AdapterIdentity (M9): devices are hosts; adapters are participants that run ON a host. A device may host multiple adapters; an adapter may move between devices.",
+  "type": "object",
+  "required": ["schema_version", "device_id", "display_name", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "device_id": {
+      "type": "string",
+      "description": "Stable per-device identifier. Format: '{hostname}-{8-hex}'. Generated once and persisted; never re-derived from hostname alone since hostnames can collide across machines (two laptops both named 'macbook-air')."
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-friendly label (e.g. 'operator-device', 'work-laptop', 'cmo-la-2 VM')."
+    },
+    "hostname": {
+      "type": "string",
+      "description": "Captured socket.gethostname() at identity generation. Diagnostic only — device_id is the canonical key for sync attribution."
+    },
+    "created_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC when this identity was minted."
+    }
+  }
+}

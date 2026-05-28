@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/worker-task.json",
+  "title": "Worker Task",
+  "description": "A bounded unit of work that OpenClaw delegates to a worker (Claude, Codex, or another adapter). Worker tasks are the only way bounded execution crosses the trust boundary from control plane to worker.",
+  "type": "object",
+  "required": ["schema_version", "id", "project_uuid", "source", "target", "kind", "trust_level", "status", "created_at", "input"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "id": {
+      "type": "string",
+      "pattern": "^task-[a-z0-9]{8,}$",
+      "description": "Globally unique. Format: task-{12char-base32}."
+    },
+    "project_uuid": {
+      "type": "string",
+      "pattern": "^proj-[a-z0-9-]+$"
+    },
+    "source": {
+      "type": "object",
+      "required": ["adapter", "actor"],
+      "properties": {
+        "adapter": { "type": "string", "enum": ["openclaw", "claude", "codex", "human"] },
+        "actor": { "type": "string", "description": "Who/what created this task (e.g. 'mika', 'operator', 'cron:nightly-review')." }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["adapter"],
+      "properties": {
+        "adapter": { "type": "string", "enum": ["claude", "codex"] },
+        "preferred_model": { "type": "string" }
+      }
+    },
+    "kind": {
+      "type": "string",
+      "description": "Task category. 'debug' added in M5.1 to absorb agent-worker.mjs's 'debug' mode; semantically close to 'code-review' + 'research' but distinct in operator intent (root-cause investigation).",
+      "enum": [
+        "code-change",
+        "code-review",
+        "debug",
+        "research",
+        "explain",
+        "test-run",
+        "artifact-generation",
+        "data-extraction",
+        "other"
+      ]
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": ["read-only", "scoped-write", "repo-write", "elevated"],
+      "description": "Resolved at enqueue time against trust-policy.schema.json. Workers MUST refuse if their actions exceed this level."
+    },
+    "status": {
+      "type": "string",
+      "description": "Task lifecycle state. Matches the directory names under ~/.cache/agent-continuity/queue/{state}/. 'running' is entered when a worker (e.g. agent-worker.mjs) actively executes a claimed task; M5.3 will add the worker.sh start subcommand that drives claimed → running. Until then no path in this codebase transitions to running, but submit accepts it as a valid from-state so .mjs can move tasks through.",
+      "enum": ["queued", "claimed", "running", "awaiting-approval", "completed", "rejected", "failed", "cancelled"]
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "claimed_at": { "type": "string", "format": "date-time" },
+    "completed_at": { "type": "string", "format": "date-time" },
+    "input": {
+      "type": "object",
+      "required": ["instruction"],
+      "properties": {
+        "instruction": { "type": "string", "minLength": 1 },
+        "context_refs": {
+          "type": "array",
+          "description": "Pointers into the shared memory (context.md / decisions.md anchors).",
+          "items": { "type": "string" }
+        },
+        "repo": { "type": "string", "format": "uri" },
+        "branch": { "type": "string" },
+        "files_allowed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Glob patterns. Worker refuses to write outside this set."
+        }
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Per-task execution permissions, preserved verbatim from agent-worker.mjs's task shape (M5.1). NOT interpreted by this layer's trust-policy resolver — those checks remain on trust_level and the policy-side files_denied/allow_kinds/etc. This block exists so .mjs's tasks round-trip through this layer's queue without data loss. dangerous_bypass and network=on are refused by .mjs at execution time; this layer additionally constrains them at the schema level (network is enum-locked to 'off', dangerous_bypass is allowed as a field but workers must refuse to act on true).",
+      "additionalProperties": true,
+      "properties": {
+        "filesystem": {
+          "type": "string",
+          "enum": ["read_only", "workspace_write"]
+        },
+        "network": {
+          "type": "string",
+          "enum": ["off"]
+        },
+        "can_run_tests": { "type": "boolean" },
+        "dangerous_bypass": { "type": "boolean" },
+        "timeout_sec": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    },
+    "expected_artifacts": {
+      "type": "array",
+      "description": "What the worker should produce. Used at result time to verify completeness.",
+      "items": {
+        "type": "object",
+        "required": ["kind", "path"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["file", "patch", "report", "decision-entry", "test-result"] },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "artifacts": { "type": "array", "items": { "type": "object" } },
+        "summary": { "type": "string" },
+        "needs_human_approval": { "type": "boolean", "default": false },
+        "approval_reason": { "type": "string" }
+      }
+    },
+    "process": {
+      "type": "object",
+      "description": "Subprocess execution metadata, set by runners (e.g. agent-worker.mjs runTask) at submit time via worker.sh submit --process-info. Optional. Provides timing, exit code, timeout flag, and log path so the canonical task record carries enough to debug a failed run without consulting runner-side ephemera. Added in M5.3c after the M5.3b bridge surfaced that .mjs's process info was being dropped between subprocess completion and the queue.",
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": ["integer", "null"], "description": "Process exit code; null if signal-killed before exit" },
+        "signal": { "type": ["string", "null"], "description": "Signal that terminated the process (e.g. SIGTERM, SIGKILL); null if exited cleanly" },
+        "timed_out": { "type": "boolean", "description": "True if the runner enforced timeout (SIGTERM → SIGKILL)" },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "log": { "type": "string", "description": "Absolute path to the runner's log file" }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "description": "Append-only trail of state transitions and any tool calls the worker made.",
+      "properties": {
+        "transitions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["at", "from", "to"],
+            "properties": {
+              "at": { "type": "string", "format": "date-time" },
+              "from": { "type": "string" },
+              "to": { "type": "string" },
+              "by": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

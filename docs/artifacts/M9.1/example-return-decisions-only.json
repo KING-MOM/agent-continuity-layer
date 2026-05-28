@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "bundle_id": "bundle-m91-T3",
+  "direction": "adapter-to-layer",
+  "created_at": "2026-05-26T02:00:00Z",
+  "from_adapter": {
+    "schema_version": "1.0",
+    "adapter_id": "claude-web-m91",
+    "adapter_type": "web-agent",
+    "adapter": "claude",
+    "display_name": "Claude web M9.1 smoke",
+    "transport": [
+      "bundle"
+    ],
+    "capabilities": {
+      "whoami": true,
+      "read_context": true,
+      "read_decisions": true,
+      "append_decision": "bundle-only",
+      "claim_task": "bundle-only",
+      "submit_result": "bundle-only"
+    },
+    "created_at": "2026-05-26T02:00:00Z"
+  },
+  "append_decisions": [
+    {
+      "decision": "M9.1 bundle ingest works",
+      "why": "Verified via T3 smoke test"
+    },
+    {
+      "decision": "Bundle injects bundle: ref",
+      "why": "auto_ref refactor preserves M8.3 + adds bundle path"
+    }
+  ]
+}

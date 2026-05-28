@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/decision-entry.json",
+  "title": "Decision Entry",
+  "description": "One entry in the cross-agent decision log (charter primitive: decision log). The minimum content a future agent — different model, different session, different device — needs to rely on the decision without re-asking the operator. Append-only: written by scripts/decisions.sh add and validated on every append. Each line of decisions.jsonl is one such entry.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "ts",
+    "adapter",
+    "repo",
+    "decision",
+    "why",
+    "refs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "description": "Per-entry schema version so future format bumps stay backward-readable. Cheap to carry, expensive to retrofit."
+    },
+    "id": {
+      "type": "string",
+      "description": "sha256 hex digest of the canonical body: this object with the 'id' field removed, serialized as JSON with sort_keys=true and separators=(',', ':'). Stable and content-addressed: two identical decisions get the same id, which makes deduplication trivial and supersedes-pointers reliable."
+    },
+    "ts": {
+      "type": "string",
+      "description": "ISO-8601 UTC instant the decision was recorded (e.g. '2026-05-25T22:30:00Z')."
+    },
+    "adapter": {
+      "type": "string",
+      "enum": ["claude", "codex", "openclaw", "human"],
+      "description": "Which adapter wrote this entry. Workers write under their own token; the operator runs `decisions.sh add --adapter human`."
+    },
+    "author": {
+      "type": "string",
+      "description": "Optional free-form author identifier. Primarily for human-attested decisions (e.g. 'operator') or to distinguish multiple operators."
+    },
+    "repo": {
+      "type": "string",
+      "description": "Scope of this decision: repo basename (from `git rev-parse --show-toplevel`), or 'global' for cross-repo decisions, or 'unknown' when no git repo could be detected. Lets agents filter the log to decisions that apply to the project they're working in."
+    },
+    "decision": {
+      "type": "string",
+      "minLength": 1,
+      "description": "1-2 sentence statement of what was decided. The fact."
+    },
+    "why": {
+      "type": "string",
+      "minLength": 1,
+      "description": "1-2 sentence statement of the constraint, deadline, prior incident, or charter rule that drove it. The load-bearing field — without 'why' a future agent will second-guess and may silently reverse the decision."
+    },
+    "refs": {
+      "type": "array",
+      "description": "Free-form pointer strings for traceability. Suggested shapes (not enforced for M8.0): 'task:task-abc', 'commit:6581b40', 'doc:CHARTER.md', 'M7.2', 'PR:https://...'. Typed refs may land in a later slice; until then, agents grep these strings.",
+      "items": { "type": "string" }
+    }
+  }
+}

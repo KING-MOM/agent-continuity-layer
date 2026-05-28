@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/context-pinned.json",
+  "title": "Context Pin",
+  "description": "M7 operator-maintained pin carrying the next_safe_action — the one piece of judgment the operator owes a fresh agent. M10.2 adds OPTIONAL last_writer_device + last_writer_ts attribution for cross-device LWW sync; legacy pin files without those fields still validate. Kept intentionally tiny: this is NOT a general settings file. The pin should hold a single short prescriptive next-step, not configuration, not preferences.",
+  "type": "object",
+  "required": ["schema_version", "next_safe_action"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "next_safe_action": {
+      "type": "string",
+      "description": "Operator-maintained one-line (or short prose) guidance for the next agent. The load-bearing field — kept short and prescriptive."
+    },
+    "last_writer_device": {
+      "type": "string",
+      "description": "M10.2: device_id of the device that pushed this pin most recently. Optional for backward compatibility with pre-M10.2 pin files; sync-aware writers populate it on every push. Matches device-identity.device_id on the pushing device."
+    },
+    "last_writer_ts": {
+      "type": "string",
+      "description": "M10.2: ISO-8601 UTC of the most recent push. The LWW key for cross-device sync. Optional for back-compat; a pin without it loses LWW comparisons to a pin that has it. Push auto-stamps this to now() on the local device so explicit operator edits get attributed by the next push."
+    }
+  }
+}

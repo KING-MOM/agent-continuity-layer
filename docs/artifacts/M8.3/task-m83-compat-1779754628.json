@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "id": "task-m83-compat-1779754628",
+  "project_uuid": "proj-m83-test",
+  "kind": "research",
+  "target": {
+    "adapter": "claude"
+  },
+  "trust_level": "read-only",
+  "status": "completed",
+  "created_at": "2026-05-26T00:17:08Z",
+  "claimed_at": "2026-05-26T00:17:08Z",
+  "claimed_by": "claude-on-m83-compat",
+  "claimed_by_adapter": "claude",
+  "source": {
+    "adapter": "human",
+    "actor": "operator"
+  },
+  "input": {
+    "instruction": "compat",
+    "repo": "agent-continuity-layer"
+  },
+  "audit": {
+    "transitions": [
+      {
+        "from": "queued",
+        "to": "claimed",
+        "at": "2026-05-26T00:17:08Z",
+        "by": "claude"
+      },
+      {
+        "at": "2026-05-26T00:17:09Z",
+        "from": "claimed",
+        "to": "completed",
+        "by": "claude-on-m83-compat"
+      }
+    ]
+  },
+  "result": {
+    "task_id": "task-m83-compat-1779754628",
+    "status": "done",
+    "worker": "claude",
+    "summary": "compat",
+    "root_cause": null,
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": [],
+    "artifacts": [],
+    "appended_decision_ids": []
+  },
+  "completed_at": "2026-05-26T00:17:09Z"
+}

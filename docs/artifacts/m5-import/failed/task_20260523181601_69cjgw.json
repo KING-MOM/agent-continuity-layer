@@ -1,0 +1,46 @@
+{
+  "task_id": "task_20260523181601_69cjgw",
+  "worker": "codex",
+  "mode": "review",
+  "repo": "/Users/<operator>/Documents/New project/agent-worker-launchd-smoke.MvxqEl",
+  "goal": "Review this LaunchAgent smoke-test repo. Confirm whether index.js and package metadata have blockers. Do not edit files.",
+  "permissions": {
+    "filesystem": "read_only",
+    "network": "off",
+    "can_edit": false,
+    "can_run_tests": false,
+    "dangerous_bypass": false
+  },
+  "expected_output": {
+    "summary": "short Spanish summary suitable for Mika to relay to the operator",
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": []
+  },
+  "status": "failed",
+  "created_at": "2026-05-23T18:16:01.116Z",
+  "updated_at": "2026-05-23T18:20:15.656Z",
+  "timeout_sec": 300,
+  "started_at": "2026-05-23T18:16:01.371Z",
+  "finished_at": "2026-05-23T18:20:15.656Z",
+  "result": {
+    "task_id": "task_20260523181601_69cjgw",
+    "status": "failed",
+    "worker": "codex",
+    "summary": "Worker runner failed before spawning the model because of a local runner bug; fixed after this artifact.",
+    "root_cause": "workerCommand returned an undefined resultFile variable for codex tasks.",
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": [],
+    "artifacts": []
+  },
+  "process": {
+    "code": 1,
+    "signal": null,
+    "timed_out": false,
+    "duration_ms": 0,
+    "log": null
+  }
+}

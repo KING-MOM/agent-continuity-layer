@@ -1,0 +1,38 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\n  \"ok\": true,\n  \"task_id\": \"task_d77094295cc0\",\n  \"task\": {\n    \"state\": \"pending\",\n    \"task_id\": \"task_d77094295cc0\",\n    \"worker\": \"codex\",\n    \"mode\": \"research\",\n    \"repo\": \"/Users/<operator>/.openclaw/workspace/agent-continuity-layer\",\n    \"goal\": \"M5.4 post-fix verification — confirm worker_enqueue now reports ok:true\",\n    \"permissions\": {\n      \"filesystem\": \"read_only\",\n      \"network\": \"off\",\n      \"can_edit\": false,\n      \"can_run_tests\": false,\n      \"dangerous_bypass\": false\n    },\n    \"expected_output\": {\n      \"summary\": \"short Spanish summary suitable for Mika to relay to the operator\",\n      \"findings\": [],\n      \"changed_files\": [],\n      \"tests_run\": [],\n      \"needs_human\": []\n    },\n    \"status\": \"pending\",\n    \"created_at\": \"2026-05-25T15:01:25Z\",\n    \"updated_at\": \"2026-05-25T15:01:25Z\",\n    \"timeout_sec\": 900\n  }\n}"
+    }
+  ],
+  "details": {
+    "ok": true,
+    "task_id": "task_d77094295cc0",
+    "task": {
+      "state": "pending",
+      "task_id": "task_d77094295cc0",
+      "worker": "codex",
+      "mode": "research",
+      "repo": "/Users/<operator>/.openclaw/workspace/agent-continuity-layer",
+      "goal": "M5.4 post-fix verification — confirm worker_enqueue now reports ok:true",
+      "permissions": {
+        "filesystem": "read_only",
+        "network": "off",
+        "can_edit": false,
+        "can_run_tests": false,
+        "dangerous_bypass": false
+      },
+      "expected_output": {
+        "summary": "short Spanish summary suitable for Mika to relay to the operator",
+        "findings": [],
+        "changed_files": [],
+        "tests_run": [],
+        "needs_human": []
+      },
+      "status": "pending",
+      "created_at": "2026-05-25T15:01:25Z",
+      "updated_at": "2026-05-25T15:01:25Z",
+      "timeout_sec": 900
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"ok\": true,\n  \"policy\": {\n    \"version\": 1,\n    \"grants\": []\n  },\n  \"raw\": \"{\\n  \\\"version\\\": 1,\\n  \\\"grants\\\": []\\n}\"\n}"
+      }
+    ],
+    "details": {
+      "ok": true,
+      "policy": {
+        "version": 1,
+        "grants": []
+      },
+      "raw": "{\n  \"version\": 1,\n  \"grants\": []\n}"
+    }
+  },
+  "elapsed_ms": 84
+}

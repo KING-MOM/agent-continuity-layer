@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0",
+  "description": "M9.2 MCP tool manifest. Declares the six adapter-contract operations as MCP tools, with input schemas and descriptions. Handlers in scripts/_mcp.py are thin wrappers over existing scripts (context.sh, decisions.sh, worker.sh) — MCP is a transport, not new orchestration. See docs/m9-adapter-pattern.md for the contract semantics.",
+  "tools": [
+    {
+      "name": "whoami",
+      "description": "Return the continuity layer's identity descriptor for the MCP-side adapter. Static; used by MCP clients to discover layer-side capabilities. Maps to AdapterIdentity from core/schemas/adapter-identity.schema.json.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "read_context",
+      "description": "Return the 60-second context snapshot (M7 artifact). Thin wrapper over `scripts/context.sh --json`. The MCP and shell paths produce identical bytes.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "enum": ["json"],
+            "description": "M9.2 v1: json only. markdown format deferred until a real MCP server transport surfaces a need (the markdown render exists at core/context-snapshot.md if a caller needs it)."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "read_decisions",
+      "description": "Return decision-entry rows from the M8 log, newest first. Thin wrapper over `scripts/decisions.sh list --json` with optional filters.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repo": { "type": "string", "description": "filter to this repo only" },
+          "adapter": {
+            "type": "string",
+            "enum": ["claude", "codex", "openclaw", "human"],
+            "description": "filter to this adapter brand only"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "cap to last N entries (0 = no cap)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "append_decision",
+      "description": "Append a decision-entry to the M8 log. Thin wrapper over `scripts/decisions.sh add`. The submit handler synthesizes id/ts/schema_version. Returns the new entry's sha256 decision_id.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["decision", "why", "adapter"],
+        "properties": {
+          "decision": { "type": "string", "minLength": 1 },
+          "why": { "type": "string", "minLength": 1 },
+          "adapter": {
+            "type": "string",
+            "enum": ["claude", "codex", "openclaw", "human"],
+            "description": "adapter brand to attribute this decision to"
+          },
+          "author": { "type": "string" },
+          "repo": {
+            "type": "string",
+            "description": "default: derive from git toplevel, or 'unknown'"
+          },
+          "refs": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "claim_task",
+      "description": "Find the first queued task matching the filter and claim it. Wraps `scripts/worker.sh list --state queued` + filtering + `scripts/worker.sh claim`. M9.2 v1: caller declares its adapter id via `as_adapter_id`; the worker id is `mcp:<as_adapter_id>` so audit transitions visibly attribute the operator-mediated MCP path (parallels M9.1's `bundle:<adapter_id>`). Returns the claimed task or null when nothing matches.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["adapter", "as_adapter_id"],
+        "properties": {
+          "adapter": {
+            "type": "string",
+            "enum": ["claude", "codex"],
+            "description": "M9.2 v1: worker.sh claim's --adapter enum is {claude, codex}; openclaw/human deferred (queue-CLI scope)"
+          },
+          "as_adapter_id": {
+            "type": "string",
+            "description": "caller's adapter_id (typically the value returned by whoami on the calling side). Embedded into worker id as `mcp:<as_adapter_id>`."
+          },
+          "kind": {
+            "type": "string",
+            "description": "filter to this task kind only"
+          },
+          "repo": {
+            "type": "string",
+            "description": "filter to this repo only (matches task.input.repo)"
+          },
+          "trust_level": {
+            "type": "string",
+            "description": "filter to this trust level only"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "submit_result",
+      "description": "Submit a worker-result for a claimed/running task. Thin wrapper over `scripts/worker.sh submit`. The result may include `decisions[]` which flow through the M8.3 writeback path (auto-injected `task:<task_id>` ref). Returns the post-transition status plus the appended_decision_ids.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["task_id", "result", "as_adapter_id"],
+        "properties": {
+          "task_id": { "type": "string" },
+          "result": {
+            "type": "object",
+            "description": "worker-result object; validated by worker.sh submit. Optional `decisions[]` triggers M8.3 writeback."
+          },
+          "as_adapter_id": {
+            "type": "string",
+            "description": "caller's adapter_id; must match the original claim's worker id (mcp:<as_adapter_id>)."
+          },
+          "needs_approval": {
+            "type": "boolean",
+            "description": "if true, route to awaiting-approval instead of completed"
+          },
+          "fail": {
+            "type": "boolean",
+            "description": "if true, route to failed instead of completed"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

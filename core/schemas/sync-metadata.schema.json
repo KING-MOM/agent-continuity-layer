@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/sync-metadata.json",
+  "title": "Sync Metadata",
+  "description": "M10.0 per-device sync state: which artifacts have been pushed or pulled, when, and how many bytes moved. Stored at $XDG_CONFIG_HOME/agent-continuity/sync-metadata.json (defaults to ~/.config/...). Single file per device; written atomically (tmp + os.replace) on each sync operation. Doctor (M10.2) reads this to surface freshness; an artifact missing from `artifacts` means 'never synced from this device.'",
+  "type": "object",
+  "required": ["schema_version", "device_id", "artifacts"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "device_id": {
+      "type": "string",
+      "description": "Owner of this metadata file; must match local device-identity.json. Doctor verifies the match in M10.2."
+    },
+    "artifacts": {
+      "type": "object",
+      "description": "Per-artifact-name sync state. M10.0: 'decisions' only. M10.1 adds 'project-registry'. M10.2 adds 'context-pinned'. The object's additionalProperties is the strict ArtifactSyncState shape — new artifact names don't require a schema bump, but each entry must match the shape.",
+      "additionalProperties": { "$ref": "#/$defs/ArtifactSyncState" }
+    }
+  },
+  "$defs": {
+    "ArtifactSyncState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "last_push_at": {
+          "type": ["string", "null"],
+          "description": "ISO-8601 UTC of last successful push from this device. null = never pushed."
+        },
+        "last_pull_at": {
+          "type": ["string", "null"],
+          "description": "ISO-8601 UTC of last successful pull to this device. null = never pulled."
+        },
+        "last_push_bytes": {
+          "type": ["integer", "null"],
+          "description": "Size of the on-VM artifact after the last successful push. Informational."
+        },
+        "last_pull_bytes": {
+          "type": ["integer", "null"],
+          "description": "Size of the on-local artifact after the last successful pull. Informational."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/adapter-identity.json",
+  "title": "Adapter Identity",
+  "description": "M9.0 adapter portability contract: an adapter's public descriptor. Declares what an adapter claims to be (adapter_id, adapter_type, brand), which transports it supports, and which contract operations it can perform. DESCRIPTIVE, not cryptographic — trust policy is the enforcement layer for writes; identity says 'this is who I claim to be', trust says 'this is what you may do'. See docs/m9-adapter-pattern.md for the canonical semantic spec.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "adapter_id",
+    "adapter_type",
+    "adapter",
+    "display_name",
+    "transport",
+    "capabilities",
+    "created_at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "adapter_id": {
+      "type": "string",
+      "description": "Stable identifier for this adapter instance (e.g. 'claude-web-2026-05-25-operator'). Used by bundles for routing (for_adapter / from_adapter) and by decision-entry / worker-task records for provenance."
+    },
+    "adapter_type": {
+      "type": "string",
+      "enum": [
+        "local-cli",
+        "openclaw-bridge",
+        "web-agent",
+        "browser-extension",
+        "read-only-auditor",
+        "mcp-client",
+        "other"
+      ],
+      "description": "How the adapter runs — its host class. Distinct from the adapter brand (see `adapter`)."
+    },
+    "adapter": {
+      "type": "string",
+      "enum": ["claude", "codex", "openclaw", "human", "other"],
+      "description": "Adapter brand. Aligns with the existing decision-entry and worker-result adapter enums so a single attribution chain works across all writers."
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-friendly label (e.g. 'Claude web session', 'Codex local on operator-device')."
+    },
+    "transport": {
+      "type": "array",
+      "description": "Transports this adapter supports for invoking the contract operations. Multiple is allowed (e.g. a browser extension might support both bundle and a local API).",
+      "items": {
+        "type": "string",
+        "enum": ["shell", "bridge", "mcp", "bundle", "browser-extension", "other"]
+      }
+    },
+    "capabilities": { "$ref": "#/$defs/Capabilities" },
+    "created_at": {
+      "type": "string",
+      "description": "When this identity descriptor was minted (ISO-8601 UTC). Lets readers detect stale or rotated identities."
+    }
+  },
+  "$defs": {
+    "Capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "whoami",
+        "read_context",
+        "read_decisions",
+        "append_decision",
+        "claim_task",
+        "submit_result"
+      ],
+      "description": "Per-operation capability declaration. The capability matrix in docs/m9-adapter-pattern.md shows typical values per adapter type.",
+      "properties": {
+        "whoami": { "$ref": "#/$defs/CapabilityValue" },
+        "read_context": { "$ref": "#/$defs/CapabilityValue" },
+        "read_decisions": { "$ref": "#/$defs/CapabilityValue" },
+        "append_decision": { "$ref": "#/$defs/CapabilityValue" },
+        "claim_task": { "$ref": "#/$defs/CapabilityValue" },
+        "submit_result": { "$ref": "#/$defs/CapabilityValue" }
+      }
+    },
+    "CapabilityValue": {
+      "description": "true = operation can be performed directly by this adapter; false = unsupported; 'bundle-only' = supported only through an operator-mediated bundle (the adapter cannot reach the layer in real time).",
+      "enum": [true, false, "bundle-only"]
+    }
+  }
+}

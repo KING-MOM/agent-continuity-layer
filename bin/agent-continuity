@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# agent-continuity — CLI dispatcher.
+#
+# Thin router: maps a subcommand name to scripts/<name>.sh inside
+# the resolved substrate dir and `exec`s it. No command-specific
+# logic lives here except --version and help — keeping this file
+# from becoming a second implementation layer.
+#
+# Resolution: the PATH shim ($HOME/.local/bin/agent-continuity) is
+# a symlink to $XDG_DATA_HOME/agent-continuity/active/bin/agent-
+# continuity. 'active' is itself a symlink to a versioned install
+# dir. We walk the symlink chain so flipping 'active' (rollback or
+# upgrade) takes effect on the next invocation without re-running
+# install.sh.
+#
+# Exit codes are propagated via `exec`: the subcommand's own rc
+# becomes our rc. Env vars (XDG_*, AGENT_CONTINUITY_*) pass through
+# untouched.
+
+set -euo pipefail
+
+# Portable symlink resolution. macOS `readlink -f` only landed in
+# Monterey; this loop works everywhere with bash + readlink.
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "${SOURCE}" ]; do
+  DIR="$(cd -P "$(dirname "${SOURCE}")" && pwd)"
+  SOURCE="$(readlink "${SOURCE}")"
+  [[ ${SOURCE} != /* ]] && SOURCE="${DIR}/${SOURCE}"
+done
+SUBSTRATE_DIR="$(cd -P "$(dirname "${SOURCE}")/.." && pwd)"
+
+# Subcommand → script map. Order here is the order shown in help.
+# Adding a new subcommand: append to SUBCOMMANDS and put a script at
+# scripts/<name>.sh; no other dispatcher edits required.
+SUBCOMMANDS=(
+  "doctor:health report (read-only)"
+  "connect:connect local adapters to the substrate"
+  "quickstart:OSS quickstart driver (init, run, decisions, doctor, reset)"
+  "decisions:cross-agent decision log"
+  "context:project context snapshot"
+  "project:local project registry"
+  "worker:worker-task queue"
+  "bundle:adapter bundle export/ingest"
+  "mcp:MCP tool surface"
+  "reference-agent:minimal SDK demo agent"
+  "sync:multi-device sync"
+  "migrate:schema migration runner"
+)
+
+usage() {
+  cat <<EOF
+agent-continuity — durable continuity for AI agents (v$(cat "${SUBSTRATE_DIR}/core/VERSION" 2>/dev/null || echo "?"))
+
+Usage:
+  agent-continuity <command> [args...]
+  agent-continuity --version
+  agent-continuity -h | --help
+
+Commands:
+EOF
+  local entry name desc
+  for entry in "${SUBCOMMANDS[@]}"; do
+    name="${entry%%:*}"
+    desc="${entry#*:}"
+    printf "  %-12s  %s\n" "${name}" "${desc}"
+  done
+  cat <<EOF
+
+See: ${SUBSTRATE_DIR}/docs/quickstart.md
+EOF
+}
+
+# Look up a subcommand name in SUBCOMMANDS. Stdout: empty if not
+# found, otherwise the name (echoed back for use in a script path).
+_lookup_subcommand() {
+  local needle="$1"
+  local entry name
+  for entry in "${SUBCOMMANDS[@]}"; do
+    name="${entry%%:*}"
+    if [ "${name}" = "${needle}" ]; then
+      echo "${name}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+case "${1:-}" in
+  --version|-V|version)
+    exec "${SUBSTRATE_DIR}/scripts/version.sh"
+    ;;
+  -h|--help|help|"")
+    usage
+    exit 0
+    ;;
+esac
+
+# Everything past this point is a subcommand route.
+cmd="$1"; shift
+if ! _lookup_subcommand "${cmd}" >/dev/null; then
+  echo "agent-continuity: unknown command: ${cmd}" >&2
+  echo >&2
+  usage >&2
+  exit 64
+fi
+
+script_path="${SUBSTRATE_DIR}/scripts/${cmd}.sh"
+if [ ! -x "${script_path}" ]; then
+  # Should be unreachable when the install is intact, but better to
+  # diagnose loudly than to give a generic "not found" later.
+  echo "agent-continuity: missing or non-executable script for '${cmd}'" >&2
+  echo "                  expected: ${script_path}" >&2
+  exit 70
+fi
+
+# exec replaces this process. The subcommand inherits all env vars,
+# its stdout/stderr are ours, and its exit code becomes ours. No
+# wrapper logic runs after this point.
+exec "${script_path}" "$@"

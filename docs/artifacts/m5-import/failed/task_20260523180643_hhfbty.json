@@ -1,0 +1,48 @@
+{
+  "task_id": "task_20260523180643_hhfbty",
+  "worker": "claude",
+  "mode": "review",
+  "repo": "/Users/<operator>/Documents/New project/agent-worker-claude-smoke.5Yuytl",
+  "goal": "Review this tiny Claude smoke-test repo. Report whether the multiply function and package metadata have blockers. Do not edit files.",
+  "permissions": {
+    "filesystem": "read_only",
+    "network": "off",
+    "can_edit": false,
+    "can_run_tests": false,
+    "dangerous_bypass": false
+  },
+  "expected_output": {
+    "summary": "short Spanish summary suitable for Mika to relay to the operator",
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": []
+  },
+  "status": "failed",
+  "created_at": "2026-05-23T18:06:43.565Z",
+  "updated_at": "2026-05-23T18:07:38.331Z",
+  "timeout_sec": 300,
+  "started_at": "2026-05-23T18:06:43.823Z",
+  "finished_at": "2026-05-23T18:07:38.331Z",
+  "result": {
+    "task_id": "task_20260523180643_hhfbty",
+    "status": "needs_human",
+    "worker": "claude",
+    "summary": "Worker did not produce valid structured JSON.",
+    "root_cause": null,
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": [
+      "Inspect log: /Users/<operator>/.openclaw/workspace/worker-tasks/logs/task_20260523180643_hhfbty.log"
+    ],
+    "artifacts": []
+  },
+  "process": {
+    "code": 0,
+    "signal": null,
+    "timed_out": false,
+    "duration_ms": 54506,
+    "log": "/Users/<operator>/.openclaw/workspace/worker-tasks/logs/task_20260523180643_hhfbty.log"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/memory-inventory.json",
+  "title": "Memory Inventory",
+  "description": "Machine-readable catalog of the memory files this continuity layer cares about. Each entry names a memory artifact, ties it to a charter continuity primitive, and declares who's allowed to write and read it. Doctor consumes this inventory to verify continuity invariants. New memory file types are added here BEFORE they appear in code — the inventory is the authority on what counts as memory.",
+  "type": "object",
+  "required": ["schema_version", "memory_files"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this inventory was last revised (operator-edited; not auto-stamped)."
+    },
+    "memory_files": {
+      "type": "array",
+      "description": "One entry per memory artifact type. Order is informational; doctor scans by name.",
+      "items": { "$ref": "#/$defs/MemoryFile" }
+    }
+  },
+  "$defs": {
+    "MemoryFile": {
+      "type": "object",
+      "required": ["name", "primitive", "description", "locations", "writers", "readers"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Stable short identifier, e.g. 'project-registry' or 'context.md'. Used by doctor and other tools."
+        },
+        "primitive": {
+          "type": "string",
+          "description": "Which charter continuity primitive this artifact serves. Must match the charter's list exactly.",
+          "enum": [
+            "project registry",
+            "context recovery",
+            "decision log",
+            "history",
+            "trust policy",
+            "handoff ledger",
+            "artifact memory",
+            "adapter portability"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "description": "One-line plain-language explanation of what this file contains."
+        },
+        "locations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/Location" }
+        },
+        "writers": {
+          "type": "array",
+          "description": "Who is allowed to write this artifact. Tokens: 'human' (operator-only), 'openclaw' (Mika/control plane), 'claude'/'codex' (worker adapters), 'any-adapter-with-approval' (any adapter when human-approved). Specific tokens preferred over open ones.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "human",
+              "openclaw",
+              "claude",
+              "codex",
+              "any-adapter-with-approval"
+            ]
+          }
+        },
+        "readers": {
+          "type": "array",
+          "description": "Who reads this artifact. 'any' means all adapters + operator can read.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "human",
+              "openclaw",
+              "claude",
+              "codex",
+              "any-adapter-with-approval",
+              "any"
+            ]
+          }
+        },
+        "schema": {
+          "type": "string",
+          "description": "Optional path to JSON Schema validating this memory file's content (e.g. 'core/schemas/worker-task.schema.json')."
+        },
+        "ownership_rules": {
+          "type": "string",
+          "description": "Free-form invariants beyond writers/readers. Examples: 'append-only', 'one file per project_uuid', 'never sync from VM to device'."
+        }
+      }
+    },
+    "Location": {
+      "type": "object",
+      "required": ["path", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Filesystem path or URI template. May contain {project_uuid}, {task_id}, {state} placeholders."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["repo", "host-config", "host-cache", "host-state", "host-workspace", "vm"],
+          "description": "Storage class. repo = checked into git (this repo); host-config = ~/.config (XDG_CONFIG_HOME); host-cache = ~/.cache (XDG_CACHE_HOME; transient by convention); host-state = ~/.local/state (XDG_STATE_HOME; durable user data like logs, history, decision logs); host-workspace = ~/.openclaw/workspace; vm = remote VM session storage. Added M8.0: host-state, for the decision log and other durable cross-session memory that explicitly is NOT cache-class."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional clarification about this specific location."
+        }
+      }
+    }
+  }
+}

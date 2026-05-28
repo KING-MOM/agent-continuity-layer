@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/trust-policy.json",
+  "title": "Trust Policy",
+  "description": "Per-repo and per-task-kind authorization. The OpenClaw adapter resolves a task's trust_level against this policy at enqueue time. Workers re-check on claim. Humans review anything that escalates beyond what the policy permits.",
+  "type": "object",
+  "required": ["schema_version", "default", "repos"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "default": {
+      "$ref": "#/$defs/RepoPolicy",
+      "description": "Applies to any repo not explicitly listed in 'repos'."
+    },
+    "repos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["origin", "policy"],
+        "properties": {
+          "origin": { "type": "string", "format": "uri" },
+          "policy": { "$ref": "#/$defs/RepoPolicy" }
+        }
+      }
+    },
+    "grants": {
+      "type": "array",
+      "description": "Time-limited explicit trust grants in agent-worker.mjs's model (M5.2a). A task that matches a non-expired grant per `grantMatchesTask` semantics (worker + repo + mode + filesystem + can_run_tests + network=off + no dangerous_bypass + timeout ≤ max) is reported by `worker.sh trust-check` as auto-approvable. `default`/`repos` govern this layer's M4 policy-routing path (whether tasks land in queued vs awaiting-approval at enqueue); `grants[]` governs explicit pre-authorization that an orchestrator can use to lift the awaiting-approval gate. Coexistence is intentional during the M5 bridge.",
+      "items": { "$ref": "#/$defs/Grant" }
+    }
+  },
+  "$defs": {
+    "RepoPolicy": {
+      "type": "object",
+      "required": ["max_trust_level", "allow_kinds"],
+      "properties": {
+        "max_trust_level": {
+          "type": "string",
+          "enum": ["read-only", "scoped-write", "repo-write", "elevated"],
+          "description": "Ceiling for any task on this repo. A task whose computed trust_level exceeds this is rejected at enqueue."
+        },
+        "allow_kinds": {
+          "type": "array",
+          "description": "Task kinds permitted on this repo. Values must be from the worker-task `kind` enum (M5.1 added 'debug').",
+          "items": {
+            "type": "string",
+            "enum": [
+              "code-change", "code-review", "debug", "research", "explain",
+              "test-run", "artifact-generation", "data-extraction", "other"
+            ]
+          }
+        },
+        "deny_kinds": {
+          "type": "array",
+          "description": "Task kinds ONLY — values must be from the worker-task `kind` enum. A kind listed here is refused on this repo even if covered by allow_kinds elsewhere. Trust levels do NOT belong here (use max_trust_level or require_human_approval_for for those).",
+          "items": { "type": "string" }
+        },
+        "require_human_approval_for": {
+          "type": "array",
+          "description": "Either task kinds (from the worker-task `kind` enum) OR trust levels (from `max_trust_level` enum). Mixing is intentional: e.g. ['code-change', 'elevated'] blocks any code-change task AND any task at the elevated trust level. Any entry listed here always blocks on human approval, regardless of source.",
+          "items": { "type": "string" }
+        },
+        "allowed_workers": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["claude", "codex"] }
+        },
+        "files_denied": {
+          "type": "array",
+          "description": "Glob patterns workers must refuse to touch on this repo (secrets, prod configs, etc).",
+          "items": { "type": "string" }
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Optional ISO-8601 expiry. After this time, the policy is treated as absent: doctor flags as expired, OpenClaw refuses to enqueue tasks against this repo until the policy is renewed."
+        }
+      }
+    },
+    "Grant": {
+      "type": "object",
+      "description": "Mirrors agent-worker.mjs grant shape so .mjs's existing trust policy migrates verbatim and round-trips cleanly. Mode and filesystem vocabularies are .mjs's (review/debug/implement/research/explain; read_only/workspace_write); trust-check translates task.kind ↔ mode and task.trust_level ↔ filesystem at match time.",
+      "required": ["grant_id", "worker", "repo", "modes", "filesystem", "expires_at"],
+      "properties": {
+        "grant_id": {
+          "type": "string",
+          "pattern": "^grant_[A-Za-z0-9_]+$"
+        },
+        "worker": { "type": "string", "enum": ["claude", "codex"] },
+        "repo": { "type": "string" },
+        "recursive": { "type": "boolean", "default": false },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["review", "debug", "implement", "research", "explain"]
+          }
+        },
+        "filesystem": { "type": "string", "enum": ["read_only", "workspace_write"] },
+        "can_run_tests": { "type": "boolean", "default": false },
+        "max_timeout_sec": { "type": "integer", "minimum": 1, "maximum": 3600 },
+        "network": { "type": "string", "enum": ["off"], "default": "off" },
+        "dangerous_bypass": { "type": "boolean", "enum": [false], "default": false },
+        "created_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "disabled": { "type": "boolean", "default": false },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

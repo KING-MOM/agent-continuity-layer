@@ -1,0 +1,30 @@
+{
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"ok\": true,\n  \"result\": {\n    \"task_id\": \"task_63ad7a70cfb2\",\n    \"state\": \"pending\",\n    \"trusted\": false,\n    \"grant_id\": null,\n    \"policy_path\": \"/Users/<operator>/.config/agent-continuity/trust-policy.json\",\n    \"checked\": {\n      \"worker\": \"codex\",\n      \"mode\": \"research\",\n      \"repo\": \"/Users/<operator>/.openclaw/workspace/agent-continuity-layer\",\n      \"filesystem\": \"read_only\",\n      \"can_run_tests\": false,\n      \"network\": \"off\",\n      \"timeout_sec\": 900\n    }\n  }\n}"
+      }
+    ],
+    "details": {
+      "ok": true,
+      "result": {
+        "task_id": "task_63ad7a70cfb2",
+        "state": "pending",
+        "trusted": false,
+        "grant_id": null,
+        "policy_path": "/Users/<operator>/.config/agent-continuity/trust-policy.json",
+        "checked": {
+          "worker": "codex",
+          "mode": "research",
+          "repo": "/Users/<operator>/.openclaw/workspace/agent-continuity-layer",
+          "filesystem": "read_only",
+          "can_run_tests": false,
+          "network": "off",
+          "timeout_sec": 900
+        }
+      }
+    }
+  },
+  "elapsed_ms": 129
+}

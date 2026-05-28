@@ -1,0 +1,46 @@
+{
+  "task_id": "task_20260523030241_vsr9gi",
+  "worker": "codex",
+  "mode": "review",
+  "repo": "/Users/<operator>/Documents/New project/agent-worker-smoke.qG5EZF",
+  "goal": "Review this tiny smoke-test repo. Report whether the add function and package metadata have any blockers. Do not edit files.",
+  "permissions": {
+    "filesystem": "read_only",
+    "network": "off",
+    "can_edit": false,
+    "can_run_tests": false,
+    "dangerous_bypass": false
+  },
+  "expected_output": {
+    "summary": "short Spanish summary suitable for Mika to relay to the operator",
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": []
+  },
+  "status": "failed",
+  "created_at": "2026-05-23T03:02:41.711Z",
+  "updated_at": "2026-05-23T03:02:43.499Z",
+  "timeout_sec": 300,
+  "started_at": "2026-05-23T03:02:41.894Z",
+  "finished_at": "2026-05-23T03:02:43.499Z",
+  "result": {
+    "task_id": "task_20260523030241_vsr9gi",
+    "status": "needs_human",
+    "worker": "codex",
+    "summary": "Worker did not produce valid structured JSON.",
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": [
+      "Inspect log: /Users/<operator>/.openclaw/workspace/worker-tasks/logs/task_20260523030241_vsr9gi.log"
+    ]
+  },
+  "process": {
+    "code": 1,
+    "signal": null,
+    "timed_out": false,
+    "duration_ms": 1604,
+    "log": "/Users/<operator>/.openclaw/workspace/worker-tasks/logs/task_20260523030241_vsr9gi.log"
+  }
+}

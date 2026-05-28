@@ -1,0 +1,2 @@
+{"schema_version": "1.0", "ts": "2026-05-26T02:54:59Z", "adapter": "human", "repo": "agent-continuity-layer", "decision": "Compat T2 decision", "why": "Verify shell vs MCP", "refs": [], "author": "operator", "id": "f85e1b295ed6d2ab1e101cb60dfb66999411358618c2ed51e623e6a3048b1117"}
+{"schema_version": "1.0", "ts": "2026-05-26T02:54:59Z", "adapter": "claude", "repo": "agent-continuity-layer", "decision": "Second decision", "why": "Verify --adapter filter", "refs": [], "author": "mcp-test", "id": "8d55799d439d82aba45baf4e8db29a067ac8b8c1412a024d249c702b9d35db60"}

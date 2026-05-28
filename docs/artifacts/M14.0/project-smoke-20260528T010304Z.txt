@@ -1,0 +1,42 @@
+sandbox: <tmp>/m14-project-smoke.q0_vs_4n
+── list (empty) ──
+   PASS
+── add from git repo ──
+   PASS
+── add idempotent on origin ──
+   PASS
+── list --json after add ──
+   PASS
+── info by name ──
+   PASS
+── info by uuid ──
+   PASS
+── info no-match returns nonzero ──
+   PASS
+── remove without --yes returns rc=2 ──
+   PASS
+── remove --yes deletes ──
+   PASS
+── auto-register fires on decisions add (git cwd) ──
+   PASS
+── auto-register no-op on non-git cwd ──
+   PASS
+── doctor reports project_registry health ──
+   PASS
+── doctor flags duplicate_origin as warn ──
+   PASS
+
+project smoke: 13/13 passed, 0 failed
+  PASS  list (empty)
+  PASS  add from git repo
+  PASS  add idempotent on origin
+  PASS  list --json after add
+  PASS  info by name
+  PASS  info by uuid
+  PASS  info no-match returns nonzero
+  PASS  remove without --yes returns rc=2
+  PASS  remove --yes deletes
+  PASS  auto-register fires on decisions add (git cwd)
+  PASS  auto-register no-op on non-git cwd
+  PASS  doctor reports project_registry health
+  PASS  doctor flags duplicate_origin as warn

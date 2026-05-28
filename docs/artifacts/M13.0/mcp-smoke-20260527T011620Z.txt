@@ -1,0 +1,45 @@
+sandbox: <tmp>/mcp-smoke.mhhz70ha
+server:  /Users/<operator>/.openclaw/workspace/agent-continuity-layer/scripts/mcp.sh serve
+── initialize: shape (protocolVersion, serverInfo, capabilities.tools) ──
+   PASS
+── notifications/initialized produces no response ──
+   PASS
+── tools/list returns the six M9.2 tools ──
+   PASS
+── tools/call whoami ──
+   PASS
+── tools/call read_context ──
+   PASS
+── tools/call read_decisions ──
+   PASS
+── tools/call claim_task (empty queue) ──
+   PASS
+── tools/call append_decision (invalid args → -32602) ──
+   PASS
+── tools/call submit_result (invalid args → -32602) ──
+   PASS
+── unknown method → -32601 ──
+   PASS
+── tools/call with missing name → -32602 ──
+   PASS
+── malformed JSON line → -32700 with id=null ──
+   PASS
+── stdin EOF → server exits 0 ──
+   PASS
+
+════════════════════════════════════════════════════
+mcp-serve smoke: 13/13 passed, 0 failed
+  PASS  initialize: shape (protocolVersion, serverInfo, capabilities.tools)
+  PASS  notifications/initialized produces no response
+  PASS  tools/list returns the six M9.2 tools
+  PASS  tools/call whoami
+  PASS  tools/call read_context
+  PASS  tools/call read_decisions
+  PASS  tools/call claim_task (empty queue)
+  PASS  tools/call append_decision (invalid args → -32602)
+  PASS  tools/call submit_result (invalid args → -32602)
+  PASS  unknown method → -32601
+  PASS  tools/call with missing name → -32602
+  PASS  malformed JSON line → -32700 with id=null
+  PASS  stdin EOF → server exits 0
+sandbox: <tmp>/mcp-smoke.mhhz70ha

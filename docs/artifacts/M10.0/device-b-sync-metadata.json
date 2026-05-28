@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "device_id": "device.local-0a58be93",
+  "artifacts": {
+    "decisions": {
+      "last_pull_at": "2026-05-26T16:15:26Z",
+      "last_pull_bytes": 273,
+      "last_push_at": "2026-05-26T16:15:26Z",
+      "last_push_bytes": 546
+    }
+  }
+}

@@ -1,0 +1,97 @@
+agent-continuity release-smoke — M12.4
+version:   v0.1.0
+stamp:     20260527T003728Z
+log:       /Users/<operator>/.openclaw/workspace/agent-continuity-layer/docs/artifacts/M12.4/smoke-20260527T003728Z.txt
+sandbox:   <tmp>/agent-continuity-smoke.XXXXXX.BqmTlpuOfi
+fake HOME: <tmp>/agent-continuity-smoke.XXXXXX.BqmTlpuOfi/home
+
+── T1: artifact present or buildable ──
+tarball + .sha256 already present in /Users/<operator>/.openclaw/workspace/agent-continuity-layer/dist
+    PASS
+
+── T2: install from tarball ──
+verifying integrity (sha256, corruption check only — not publisher signature)
+agent-continuity-v0.1.0.tar.gz: OK
+installing agent-continuity v0.1.0
+  install:  <tmp>/agent-continuity-smoke.XXXXXX.BqmTlpuOfi/home/.local/share/agent-continuity/v0.1.0
+  active:   <tmp>/agent-continuity-smoke.XXXXXX.BqmTlpuOfi/home/.local/share/agent-continuity/active
+  shim:     <tmp>/agent-continuity-smoke.XXXXXX.BqmTlpuOfi/home/.local/bin/agent-continuity
+
+installed:
+  agent-continuity v0.1.0
+  invoke as: <tmp>/agent-continuity-smoke.XXXXXX.BqmTlpuOfi/home/.local/bin/agent-continuity --version
+    PASS
+
+── T3: agent-continuity --version ──
+output: 0.1.0
+    PASS
+
+── T4: doctor --human (substrate version present, no path leak) ──
+agent-continuity-layer doctor v1.0 - 2026-05-27T00:37:29Z on device.local
+checks: 5 ok, 1 warn, 0 error, 9 info
+
+[OK   ] repo
+         substrate v0.1.0
+         schemas: 13 present, parse_all_ok=True
+         scripts: 5/5 executable
+[OK   ] charter
+         CHARTER.md present at repo root
+         all 5 required files reference CHARTER.md
+         inventory: 19 entries, schema validation ok
+         all 8 charter primitives covered
+[OK   ] context snapshot
+         schema valid; HEAD comparison skipped
+         last_completed: M12.3  next_major_milestone: M13
+(rc=2)
+    PASS
+
+── T5: migrate --dry-run no-op ──
+current version: v0.1.0
+target version:  v0.1.0
+plan:            no migrations needed (current == target)
+--dry-run:       no changes would be made.
+    PASS
+
+── T6: quickstart init ──
+    PASS
+
+── T7: quickstart doctor ──
+    PASS
+
+── T8: quickstart enqueue ──
+    PASS
+
+── T9: quickstart run-fake-worker ──
+    PASS
+
+── T10: quickstart decisions list contains durable decision ──
+2026-05-27T00:37:31Z  [codex]  repo=quickstart-project  id=71d1cb0
+  decision: Fixture worker reviewed the quickstart task and confirmed the M11 substrate preserves attributed reasoning from a delegated worker.
+  why     : The quickstart's purpose is to demonstrate that a delegated worker can append a durable decision the operator can read minutes (or months) later, with full provenance and no operator intervention beyond running the script. This decision is that demonstration — its existence in the canonical log IS the proof.
+  refs    : task:task-6af45645d5f0, M11.1, doc:docs/north-star.md
+    PASS
+
+── T11: quickstart reset removes sandbox dirs ──
+    PASS
+
+── T12: no writes outside temp HOME (real namespace fingerprint unchanged) ──
+real HOME continuity namespace: BYTE-IDENTICAL before/after
+    PASS
+
+════════════════════════════════════════════════════
+smoke summary: 12/12 passed, 0 failed
+  PASS  artifact present or buildable
+  PASS  install from tarball
+  PASS  agent-continuity --version
+  PASS  doctor --human (substrate version present, no path leak)
+  PASS  migrate --dry-run no-op
+  PASS  quickstart init
+  PASS  quickstart doctor
+  PASS  quickstart enqueue
+  PASS  quickstart run-fake-worker
+  PASS  quickstart decisions list contains durable decision
+  PASS  quickstart reset removes sandbox dirs
+  PASS  no writes outside temp HOME (real namespace fingerprint unchanged)
+log:      /Users/<operator>/.openclaw/workspace/agent-continuity-layer/docs/artifacts/M12.4/smoke-20260527T003728Z.txt
+sandbox:  <tmp>/agent-continuity-smoke.XXXXXX.BqmTlpuOfi
+(sandbox cleaned on PASS)

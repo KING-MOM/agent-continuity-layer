@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-continuity-layer/schemas/v1/project-registry-entry.json",
+  "title": "Project Registry Entry",
+  "description": "M10.1 canonical per-project record. One file per project on both sides of the sync boundary: local at $XDG_STATE_HOME/agent-continuity/registry/{project_uuid}.json; VM at $AGENT_CONTINUITY_VM_PATH/sessions/{project_uuid}/registry-entry.json. Synced via `scripts/sync.sh push --artifact project-registry` and the matching pull. Structured merge: scalar metadata fields use LWW by last_writer_ts (with last_writer_device alphabetical tiebreak); repos[] union by origin; observed_paths[] within each repo dedupe by device_id (one preferred path per repo per device, LWW by observed_at). The aggregate at core/schemas/project-registry.schema.json is now a derived view; per-project entries are canonical. Project identity is GLOBAL (uuid + repo origin); paths are device-local observations.",
+  "type": "object",
+  "required": ["schema_version", "uuid", "name", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "uuid": {
+      "type": "string",
+      "description": "Canonical project identifier — global, stable. Format: 'proj-{kebab-name}-{epoch-tail}'. The key for cross-device matching: a project is the same project on device A and device B iff this string matches."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "created_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC when the project was first registered (any device)."
+    },
+    "last_active": {
+      "type": "string",
+      "description": "ISO-8601 UTC: last time any device touched this project. Distinct from last_writer_ts, which is specifically 'who pushed this record version on sync.'"
+    },
+    "last_writer_device": {
+      "type": "string",
+      "description": "device_id of the device that wrote this record version. The merge tiebreak key when last_writer_ts is equal."
+    },
+    "last_writer_ts": {
+      "type": "string",
+      "description": "ISO-8601 UTC of the write that produced this record version. The LWW key for scalar fields. Required to participate in M10.1 merge; entries without it are treated as the oldest possible (always lose)."
+    },
+    "last_device": {
+      "type": "string",
+      "description": "M3-legacy field carrying 'any device touched this' semantics. Retained for compatibility readers; M10.1 merge does NOT consult this field — last_writer_device + last_writer_ts are the merge keys."
+    },
+    "last_interface": {
+      "type": "string",
+      "enum": ["claude-code", "codex-cli", "openclaw", "whatsapp", "telegram", "web", "other"]
+    },
+    "context_summary": { "type": "string" },
+    "files_fingerprint": {
+      "type": "string",
+      "description": "Optional sha256 hex digest of a fingerprint over the project's files. Format suggestion: 'sha256:{64-hex}'. Validator does not enforce the pattern."
+    },
+    "tags": { "type": "array", "items": { "type": "string" } },
+    "repos": {
+      "type": "array",
+      "description": "Git repos associated with this project. Merge key is origin (the canonical git URL). observed_paths within each repo are per-device facts.",
+      "items": { "$ref": "#/$defs/Repo" }
+    },
+    "owners": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Authorized humans for this project (e.g. email addresses)."
+    }
+  },
+  "$defs": {
+    "Repo": {
+      "type": "object",
+      "required": ["origin"],
+      "additionalProperties": false,
+      "properties": {
+        "origin": {
+          "type": "string",
+          "description": "Canonical git remote URL (e.g. 'git@github.com:org/repo.git', 'https://github.com/org/repo.git'). Secondary global identifier — devices can match projects on origin even if uuids drift."
+        },
+        "observed_paths": {
+          "type": "array",
+          "description": "Per-device path observations. Each entry says 'on device X, this repo lives at path Y as of observed_at.' Merge key within an origin is device_id; one preferred path per repo per device for M10.1 v1 (multi-clone per device deferred to a future role/workspace_id field).",
+          "items": { "$ref": "#/$defs/ObservedPath" }
+        }
+      }
+    },
+    "ObservedPath": {
+      "type": "object",
+      "required": ["device_id", "path", "observed_at"],
+      "additionalProperties": false,
+      "properties": {
+        "device_id": {
+          "type": "string",
+          "description": "Which device this observation came from. Matches device-identity.device_id on that device."
+        },
+        "path": {
+          "type": "string",
+          "description": "Local filesystem path on the named device. NOT portable — only valid for that device_id. Other devices ignore this string's actual filesystem semantics on themselves."
+        },
+        "observed_at": {
+          "type": "string",
+          "description": "ISO-8601 UTC when this device observed the path. LWW key within (origin, device_id): newer observation wins."
+        }
+      }
+    }
+  }
+}

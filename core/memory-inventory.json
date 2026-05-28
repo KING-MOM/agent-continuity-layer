@@ -1,0 +1,240 @@
+{
+  "schema_version": "1.0",
+  "updated_at": "2026-05-26T19:50:00Z",
+  "memory_files": [
+    {
+      "name": "project-registry",
+      "primitive": "project registry",
+      "description": "M3-LEGACY aggregate view of all projects. Single file, single-writer (OpenClaw), read-only mirror per device. M10.1 RECLASSIFIES this entry as a derived view — the canonical per-project records now live at project-registry-entry (below). Existing M3 readers expecting the aggregate form can continue to read it; future M-x may add an on-demand rebuild command that synthesizes the aggregate from per-project files.",
+      "locations": [
+        { "path": "~/life-agents/sessions/registry.json", "kind": "vm", "note": "M3-legacy aggregate; canonical store for M3 reader path only" },
+        { "path": "~/.cache/agent-continuity/registry.json", "kind": "host-cache", "note": "M3 read-only mirror written by `sync.sh` (legacy mode)" }
+      ],
+      "writers": ["openclaw"],
+      "readers": ["any"],
+      "schema": "core/schemas/project-registry.schema.json",
+      "ownership_rules": "M3-legacy. New writers should target project-registry-entry instead. The host-cache copy is rebuilt by `scripts/sync.sh` (legacy, no subcommand) and must never be edited directly."
+    },
+    {
+      "name": "project-registry-entry",
+      "primitive": "project registry",
+      "description": "M10.1 canonical per-project record. One file per project, syncable across devices via `scripts/sync.sh push/pull --artifact project-registry`. Structured merge: scalar metadata fields use LWW by last_writer_ts (with last_writer_device alphabetical tiebreak); repos[] union by origin; observed_paths[] within each repo dedupe by device_id (one preferred path per repo per device for M10.1 v1, LWW by observed_at). Project identity is GLOBAL (uuid + repo origin); paths are device-local observations recorded in observed_paths[].",
+      "locations": [
+        { "path": "~/.local/state/agent-continuity/registry/{project_uuid}.json", "kind": "host-state", "note": "per-device local store; honors $XDG_STATE_HOME. Updated atomically on every pull (and operator-driven edit)." },
+        { "path": "$AGENT_CONTINUITY_VM_PATH/sessions/{project_uuid}/registry-entry.json", "kind": "vm", "note": "VM-canonical merged copy. Pushed/pulled by scripts/sync.sh push/pull --artifact project-registry. Lives under the project-scoped $VM/sessions/{uuid}/ tree (distinct from $VM/state/ which holds global state like decisions.jsonl)." }
+      ],
+      "writers": ["human", "openclaw", "claude", "codex"],
+      "readers": ["any"],
+      "schema": "core/schemas/project-registry-entry.schema.json",
+      "ownership_rules": "M10.1: any device can write its own copy + sync. No per-project lock in v1 — atomic tmp+rename writes plus operator-initiated sync are sufficient at M10.1 frequencies. Structured merge preserves per-device path observations across all syncs: another device's update to scalar fields never erases this device's path observation. M10.2 will add a doctor check for entry freshness + sync staleness."
+    },
+    {
+      "name": "context.md",
+      "primitive": "context recovery",
+      "description": "Dense, current snapshot of project state — what's been built, what's pending, what a new agent needs to know to be useful.",
+      "locations": [
+        { "path": "~/life-agents/sessions/{project_uuid}/context.md", "kind": "vm" },
+        { "path": "~/.cache/agent-continuity/{project_uuid}/context.md", "kind": "host-cache" }
+      ],
+      "writers": ["openclaw", "any-adapter-with-approval"],
+      "readers": ["any"],
+      "ownership_rules": "Overwritten in place after meaningful interactions. Writer must include a trailing attribution comment ('<!-- written-by: ... -->'). Non-OpenClaw writes require explicit human approval. See core/context-format.md."
+    },
+    {
+      "name": "decisions.jsonl",
+      "primitive": "decision log",
+      "description": "Append-only JSONL log of design/scope/tool decisions. Each line is a schema-validated entry with schema_version, id (sha256 of canonical body), ts (ISO-8601 UTC), adapter, repo, decision, why, refs[], and optional author. Written by scripts/decisions.sh add; validated against core/schemas/decision-entry.schema.json on every append. Carries the WHY behind non-obvious choices so a different agent (different model, different session, different device) can rely on prior reasoning without re-asking the operator.",
+      "locations": [
+        { "path": "~/.local/state/agent-continuity/decisions.jsonl", "kind": "host-state", "note": "default; honors $XDG_STATE_HOME. Per-device local log; merged across devices via M10.0 sync." },
+        { "path": "$AGENT_CONTINUITY_VM_PATH/state/decisions.jsonl", "kind": "vm", "note": "M10.0: VM-canonical merged copy. Pushed by `scripts/sync.sh push --artifact decisions` and pulled by `scripts/sync.sh pull --artifact decisions`. Global state path ($VM/state/...) is distinct from project-scoped paths ($VM/sessions/{project_uuid}/...) per the M10.0 layout — decisions are not forced into a fake project." }
+      ],
+      "writers": ["human", "claude", "codex", "openclaw"],
+      "readers": ["any"],
+      "schema": "core/schemas/decision-entry.schema.json",
+      "ownership_rules": "APPEND-ONLY by design. scripts/decisions.sh offers add + list only — no edit or delete subcommand exists. The only mutation paths are: (a) append a new entry, or (b) destructively `rm` the file outside the CLI. Concurrency is guarded by an exclusive-create lock file (decisions.jsonl.lock) acquired on every add; stale locks must be cleared manually with `rm` if a writer crashed mid-add. Doctor freshness/schema checks land in M8.1. Worker-result integration (workers append decisions automatically from task output) is M8.3. Compaction (rolling-summary of older entries to bound file size) is M8.4."
+    },
+    {
+      "name": "history.md",
+      "primitive": "history",
+      "description": "Compressed chat history across sessions, channels, and devices. Older messages get summarized; newest kept verbatim. Sliding-window compression every ~50 messages.",
+      "locations": [
+        { "path": "~/life-agents/sessions/{project_uuid}/history.md", "kind": "vm" },
+        { "path": "~/.cache/agent-continuity/{project_uuid}/history.md", "kind": "host-cache" }
+      ],
+      "writers": ["openclaw"],
+      "readers": ["any"],
+      "ownership_rules": "OpenClaw's compressor is the only writer. Workers and operators read but don't modify. The compression algorithm is per v0.1's documented strategy."
+    },
+    {
+      "name": "trust-policy",
+      "primitive": "trust policy",
+      "description": "Per-device trust policy: default repo-policy, per-repo overrides, and time-limited .mjs-style grants. Authorizes worker tasks at enqueue and at claim. M11.0: policy path honors $XDG_CONFIG_HOME so the quickstart's sandboxed namespace can hold its own time-limited research-only grant without touching the operator's real policy.",
+      "locations": [
+        { "path": "$XDG_CONFIG_HOME/agent-continuity/trust-policy.json", "kind": "host-config", "note": "canonical host-side policy; defaults to ~/.config/agent-continuity/trust-policy.json. M11.0 quickstart sandbox writes a sibling policy at $HOME/.config/agent-continuity-quickstart/agent-continuity/trust-policy.json." },
+        { "path": "~/.openclaw/workspace/worker-tasks/trust-policy.json", "kind": "host-workspace", "note": "legacy .mjs location; migrated via scripts/migrate-agent-worker-grants.sh" }
+      ],
+      "writers": ["human", "openclaw"],
+      "readers": ["claude", "codex", "openclaw"],
+      "schema": "core/schemas/trust-policy.schema.json",
+      "ownership_rules": "Operator owns the default and repos[] entries. The grants[] array can be appended by 'worker.sh trust-add' (M5.2a) or migrated from .mjs. Backup-before-write enforced by every mutating CLI."
+    },
+    {
+      "name": "worker-task-record",
+      "primitive": "handoff ledger",
+      "description": "Per-task JSON record covering the full handoff lifecycle: enqueue → claim → start → completed/awaiting-approval/rejected/failed. Carries audit transitions, policy reasons, result, and process metadata.",
+      "locations": [
+        { "path": "$XDG_CACHE_HOME/agent-continuity/queue/{state}/{task_id}.json", "kind": "host-cache", "note": "state = queued|claimed|running|completed|awaiting-approval|rejected|failed|cancelled; defaults to ~/.cache/. M11.0: path honors XDG_CACHE_HOME so the quickstart's sandboxed namespace can hold its own fixture queue without colliding with the operator's real one." },
+        { "path": "docs/artifacts/{milestone}/{task_id}.json", "kind": "repo", "note": "evidence exports per the M5.2b convention" }
+      ],
+      "writers": ["openclaw", "claude", "codex", "human"],
+      "readers": ["any"],
+      "schema": "core/schemas/worker-task.schema.json",
+      "ownership_rules": "State transitions are atomic via os.rename. Audit transitions are append-only; never edit past entries. Each worker.sh subcommand is the single authority for one transition (claim, start, submit, approve, reject). See docs/architecture.md."
+    },
+    {
+      "name": "worker-result",
+      "primitive": "artifact memory",
+      "description": "Structured worker output (findings, changed files, tests run, needs_human, artifacts) embedded in task.result on submit. Carries the substantive output of a delegated task. M8.3: optional `decisions[]` (WorkerDecisionDraft drafts) flow through submit into the canonical decisions log; `appended_decision_ids[]` is submit-handler bookkeeping mirroring the auto-injected `task:<task_id>` ref on each appended entry.",
+      "locations": [
+        { "path": "embedded in worker-task-record at task.result", "kind": "host-cache" }
+      ],
+      "writers": ["claude", "codex"],
+      "readers": ["any"],
+      "schema": "core/schemas/worker-result.schema.json",
+      "ownership_rules": "Validated against worker-result.schema.json on submit. Mika sees this shape verbatim through worker_show via the .mjs bridge. M8.3 decisions[] drafts are validated and appended BEFORE the task state transition by scripts/_decisions.append_entries_from_worker (called from _worker.cmd_submit). Any invalid draft (or non-array `decisions` value, per M8.3.1) rejects the entire submit; the task stays in its current state. M8.3.2: the .mjs bridge (resultSchema() + normalizeWorkerResult() at ~/.openclaw/workspace/scripts/agent-worker.mjs) now carries decisions[] through, so Mika/OpenClaw runner-path tasks self-feed the decision log on submit just like direct worker.sh submit does."
+    },
+    {
+      "name": "mika-compat-sidecar",
+      "primitive": "handoff ledger",
+      "description": "Per-task overlay carrying Mika-specific fields (expected_output, etc.) not preserved in worker.sh's schema. Lets .mjs round-trip Mika-shape tasks across the bridge without data loss.",
+      "locations": [
+        { "path": "~/.openclaw/workspace/worker-tasks/_mika_compat/{task_id}.json", "kind": "host-workspace" }
+      ],
+      "writers": ["openclaw"],
+      "readers": ["openclaw"],
+      "ownership_rules": "Created at bridged enqueue. Read at bridged show + run-next. Operator can delete safely; loss only affects expected_output round-trip, which falls back to the default template."
+    },
+    {
+      "name": "charter",
+      "primitive": "adapter portability",
+      "description": "The canonical product charter. Defines continuity primitives, non-goals, architecture rules, and the milestone rule. Every adapter's SKILL.md must reference it.",
+      "locations": [
+        { "path": "CHARTER.md", "kind": "repo", "note": "canonical at repo root" }
+      ],
+      "writers": ["human"],
+      "readers": ["any"],
+      "ownership_rules": "Operator-only mutation. Architectural changes that affect the primitive list require updating this inventory's `primitive` enum and any code that depends on it."
+    },
+    {
+      "name": "skill-files",
+      "primitive": "adapter portability",
+      "description": "Thin SKILL.md per adapter (claude, codex, openclaw) that points each host agent at the continuity layer. Source-of-truth in this repo at skills/{adapter}/SKILL.md; installed to each adapter's home via scripts/install-thin-skills.sh.",
+      "locations": [
+        { "path": "skills/{adapter}/SKILL.md", "kind": "repo", "note": "source-of-truth" },
+        { "path": "~/.claude/skills/agent-continuity/SKILL.md", "kind": "host-config", "note": "installed for Claude Code" },
+        { "path": "~/.codex/skills/agent-continuity/SKILL.md", "kind": "host-config", "note": "installed for Codex CLI" },
+        { "path": "~/.openclaw/workspace/skills/agent-continuity/SKILL.md", "kind": "host-workspace", "note": "installed for OpenClaw" }
+      ],
+      "writers": ["human"],
+      "readers": ["any"],
+      "ownership_rules": "Version-tracked in frontmatter (version: '0.1.0'). install-thin-skills.sh refuses to overwrite a newer-installed version without --force. Drift detected via sha256 in doctor."
+    },
+    {
+      "name": "decisions.compacted.jsonl",
+      "primitive": "decision log",
+      "description": "M8.4 derived view of the cross-agent decision log: keep last N entries verbatim, plus ONE synthetic rolling-summary decision-entry that represents all older entries. The summary's refs[] contains 'decision:<sha256>' pointers back to every summarized id in the canonical decisions.jsonl, so traceability is preserved. Written only when an operator runs `scripts/decisions.sh compact`; no auto-compaction. The canonical decisions.jsonl is NEVER modified by compaction.",
+      "locations": [
+        { "path": "~/.local/state/agent-continuity/decisions.compacted.jsonl", "kind": "host-state", "note": "default; honors $XDG_STATE_HOME. Regeneratable from decisions.jsonl at any time; safe to delete." }
+      ],
+      "writers": ["human"],
+      "readers": ["any"],
+      "schema": "core/schemas/decision-entry.schema.json",
+      "ownership_rules": "REGENERATABLE derived view. Written atomically via tmp + os.replace by `scripts/decisions.sh compact`; --dry-run prints the would-be output without writing. The summary entry uses adapter='human' (operator initiated the command) with author='auto:scripts/decisions.sh-compact' (machine-synthesized content). Identical inputs produce identical summary ids (sha256 of canonical body), so repeat runs are idempotent. NEVER mutates decisions.jsonl — the append-only invariant on the canonical source stays inviolate."
+    },
+    {
+      "name": "device-identity",
+      "primitive": "project registry",
+      "description": "M10.0 per-device descriptor for multi-device sync. Carries device_id (hostname + random suffix), display_name, hostname, and created_at. Distinct from M9's AdapterIdentity: devices are hosts, adapters are participants that run on a host. Generated once per device on first push/pull and persisted; never re-derived from hostname alone (collisions are real — two laptops can both be 'macbook-air').",
+      "locations": [
+        { "path": "~/.config/agent-continuity/device-identity.json", "kind": "host-config", "note": "default; honors $XDG_CONFIG_HOME. One per device, written atomically (tmp + os.replace) on first sync invocation." }
+      ],
+      "writers": ["openclaw", "claude", "codex"],
+      "readers": ["any"],
+      "schema": "core/schemas/device-identity.schema.json",
+      "ownership_rules": "Auto-generated on first sync.sh push/pull invocation. Operator can edit display_name manually; device_id must remain stable across the device's lifetime (changing it breaks sync attribution). M10.2 doctor check verifies the file parses and that sync-metadata.device_id matches."
+    },
+    {
+      "name": "sync-metadata",
+      "primitive": "history",
+      "description": "M10.0 per-device sync state: per-artifact last_push_at / last_pull_at / byte counts. Lets the operator (and M10.2 doctor) see which device synced what artifact when, surfacing staleness before a fresh agent acts on out-of-date memory.",
+      "locations": [
+        { "path": "~/.config/agent-continuity/sync-metadata.json", "kind": "host-config", "note": "default; honors $XDG_CONFIG_HOME. Single file per device, written atomically on each sync operation." }
+      ],
+      "writers": ["openclaw", "claude", "codex"],
+      "readers": ["any"],
+      "schema": "core/schemas/sync-metadata.schema.json",
+      "ownership_rules": "Maintained by scripts/sync.sh push/pull. Each push/pull updates the corresponding artifact's last_*_at and last_*_bytes. M10.2 doctor check verifies the file parses and reports per-artifact freshness."
+    },
+    {
+      "name": "mcp-tools-manifest",
+      "primitive": "adapter portability",
+      "description": "M9.2 MCP tool manifest declaring the six adapter-contract operations (whoami, read_context, read_decisions, append_decision, claim_task, submit_result) with their input schemas. Handlers in scripts/_mcp.py are thin wrappers over the existing shell entry points (context.sh, decisions.sh, worker.sh) — MCP is a transport, not new orchestration. The manifest is consumable by any MCP server implementation; M9.2 ships a CLI dispatcher (scripts/mcp.sh tool <name>) as the operational substance and defers a wire-protocol server (stdio JSON-RPC, HTTP) until a real consumer surfaces the need.",
+      "locations": [
+        { "path": "core/mcp/tools.json", "kind": "repo", "note": "canonical manifest; checked into the repo so any adapter implementation can read it directly." }
+      ],
+      "writers": ["human"],
+      "readers": ["any"],
+      "ownership_rules": "Operator-only writer. Each tool entry's name + inputSchema is the stable surface; handler implementation in scripts/_mcp.py must stay in sync with the schema. The MCP worker-id convention for write operations is 'mcp:<as_adapter_id>' (parallels M9.1's 'bundle:<adapter_id>') so audit trails visibly distinguish operator-mediated MCP paths from direct adapter writes."
+    },
+    {
+      "name": "adapter-identity",
+      "primitive": "adapter portability",
+      "description": "M9.0 descriptor that an adapter publishes to declare what it is (adapter_id, adapter_type, brand), what transports it supports, and which contract operations it can perform. DESCRIPTIVE only — identity says 'this is who I claim to be', trust policy says 'this is what you may do'. See docs/m9-adapter-pattern.md for the canonical semantic spec.",
+      "locations": [
+        { "path": "<operator-provided / embedded>", "kind": "host-state", "note": "M9.0 defines the schema; instances are typically embedded in adapter-bundle objects, inlined in adapter configs, or hardcoded by built-in adapters. M9.x may pin a conventional path (e.g. ~/.config/agent-continuity/adapters/) once one proves useful." }
+      ],
+      "writers": ["human", "openclaw", "claude", "codex"],
+      "readers": ["any"],
+      "schema": "core/schemas/adapter-identity.schema.json",
+      "ownership_rules": "Each adapter publishes its own identity. The identity does NOT authorize writes — existing trust policy on claim/submit/decision-append is the enforcement boundary. Schema-validity is checked at bundle ingest and (M9.3+) by doctor when identities are configured at a conventional path. Capability declarations are descriptive: a host UI uses them to know which operations to surface, but trust policy still gates each write."
+    },
+    {
+      "name": "adapter-bundle",
+      "primitive": "adapter portability",
+      "description": "M9.0 operator-mediated JSON envelope encoding the six contract operations for adapters that cannot reach the layer directly (web agents, restricted environments). Two directions: layer-to-adapter (import; carries context, decisions, optional task) and adapter-to-layer (export; carries append_decisions and submit_results). Transient by nature — bundles exist at export/ingest time, not as persistent memory.",
+      "locations": [
+        { "path": "<operator-provided / transient>", "kind": "host-state", "note": "M9.0 defines the envelope schema only. M9.1 introduces scripts/bundle.sh export/ingest CLIs that may pin a conventional directory; until then bundles live wherever the operator places the file." }
+      ],
+      "writers": ["human", "openclaw", "claude", "codex"],
+      "readers": ["any"],
+      "schema": "core/schemas/adapter-bundle.schema.json",
+      "ownership_rules": "Bundles are transient envelopes, not persistent memory. M9.1 ships scripts/bundle.sh export/ingest. Ingest validates the envelope schema FIRST, then routes embedded payloads through canonical writers: append_decisions → _decisions.append_entries_from_bundle (M9.1 sibling of M8.3's _from_worker; auto-injects 'bundle:<bundle_id>' ref instead of 'task:<task_id>'); submit_results → worker.sh claim/start/submit on the operator's behalf using worker id 'bundle:<adapter_id>'. Bundles MUST NOT bypass the canonical writer enforcement. Source logs remain append-only; ingest never edits decisions.jsonl or queue files directly. bundle_claim metadata (task_id + sha256 task_hash + exported_at) lets ingest detect any change to the task between export and ingest — including audit/state changes from concurrent claims — and reject the bundle rather than apply stale work."
+    },
+    {
+      "name": "context-snapshot",
+      "primitive": "context recovery",
+      "description": "60-second orientation artifact for fresh agents. Single file containing project identity, current milestone state, work in flight, non-goals, navigation, and the operator's next safe action. Derived from git, CHARTER.md, docs/roadmap.md, the worker queue, and trust policy.",
+      "locations": [
+        { "path": "core/context-snapshot.json", "kind": "repo", "note": "machine-readable form" },
+        { "path": "core/context-snapshot.md", "kind": "repo", "note": "human-readable mirror of the same data" }
+      ],
+      "writers": ["human", "openclaw", "claude", "codex"],
+      "readers": ["any"],
+      "schema": "core/schemas/context-snapshot.schema.json",
+      "ownership_rules": "Regenerated by scripts/context.sh --write. Derived from authoritative sources except next_safe_action (sourced from context-pinned). Any adapter can regenerate without approval — the script is read-only against authoritative state and only rewrites the snapshot files. Doctor (M7.1+) flags staleness when source_head_sha != git rev-parse HEAD."
+    },
+    {
+      "name": "context-pinned",
+      "primitive": "context recovery",
+      "description": "The one operator-maintained piece of judgment in the context snapshot: a single short statement describing the next safe action a fresh agent could take without re-asking. Read by scripts/context.sh and embedded into context-snapshot.next_safe_action. M10.2 added LWW sync attribution (last_writer_device, last_writer_ts) so the pin can travel between devices through `scripts/sync.sh push/pull --artifact context-pinned`.",
+      "locations": [
+        { "path": "core/context-pinned.json", "kind": "repo", "note": "default local path; honors AGENT_CONTINUITY_PIN_PATH override for sandbox testing" },
+        { "path": "$AGENT_CONTINUITY_VM_PATH/state/context-pinned.json", "kind": "vm", "note": "M10.2: VM-canonical pin; global state path (same tree as decisions). Pushed/pulled by sync.sh push/pull --artifact context-pinned with LWW merge by last_writer_ts." }
+      ],
+      "writers": ["human"],
+      "readers": ["any"],
+      "schema": "core/schemas/context-pinned.schema.json",
+      "ownership_rules": "SEMANTIC AUTHORSHIP IS OPERATOR-ONLY. The next_safe_action prose is written by the human operator; no adapter authors continuity intent. M10.2's sync push CAN be invoked from any device by the operator (regardless of which adapter is currently logged in on that device), but the push handler only stamps last_writer_device + last_writer_ts as attribution metadata — it never alters the operator-authored next_safe_action text. The merge (pure LWW by last_writer_ts; alphabetical last_writer_device tiebreak; no prose merge) preserves whichever operator-authored prose is newer; it does not synthesize new content. M7.2's stale-pin doctor check (leading-tag analysis) and M10.2's cross-device sync visibility are separate concerns; both coexist."
+    }
+  ]
+}

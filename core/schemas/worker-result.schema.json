@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Ported verbatim from ~/.openclaw/workspace/worker-tasks/schemas/worker-result.schema.json in M5.1 so .mjs workers (codex, claude) can submit results through this layer's queue without schema drift. Do NOT modify the shape unilaterally — if .mjs changes its result contract, this file follows; if this file changes, .mjs's normalizeWorkerResult must follow. M5.5 may consolidate ownership once the bridge stabilizes. M8.3: added optional `decisions[]` (worker-submitted decision drafts) and `appended_decision_ids[]` (submit-handler bookkeeping); validation of decision drafts is enforced in code at submit time by scripts/_decisions.append_entries_from_worker. M8.3.2: .mjs resultSchema() + normalizeWorkerResult() now carry decisions[] through (host-side file: ~/.openclaw/workspace/scripts/agent-worker.mjs); the bridge is end-to-end for decision writeback through the Mika/OpenClaw runner path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "task_id",
+    "status",
+    "worker",
+    "summary",
+    "root_cause",
+    "findings",
+    "changed_files",
+    "tests_run",
+    "needs_human",
+    "artifacts"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "done",
+        "failed",
+        "needs_human"
+      ]
+    },
+    "worker": {
+      "type": "string",
+      "enum": [
+        "codex",
+        "claude"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "root_cause": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "body",
+          "file",
+          "line",
+          "severity"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "file": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
+          }
+        }
+      }
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tests_run": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "needs_human": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "M8.3: optional worker-submitted decision drafts. Each item is a WorkerDecisionDraft (decision/why required, refs/author optional). The submit handler (worker.sh submit) validates each draft, synthesizes id/ts/schema_version/adapter (from task.claimed_by_adapter — the canonical adapter token; NOT task.claimed_by which is the descriptive identifier)/repo (from task.input.repo per the canonical worker-task schema; falls back to 'unknown') and an auto-injected 'task:<task_id>' ref, then appends each as a full decision-entry to ~/.local/state/agent-continuity/decisions.jsonl. If any draft fails validation OR this field is present but not an array, the entire submit is rejected and the task remains in its current state. (M8.3.1 corrected the field-name documentation here — the original referenced task.claimed_by and task.repo_origin/task.repo, which don't match the actual worker-task schema; the implementation always used the correct fields.)",
+      "items": { "$ref": "#/$defs/WorkerDecisionDraft" }
+    },
+    "appended_decision_ids": {
+      "type": "array",
+      "description": "M8.3: submit-handler-authoritative bookkeeping — the sha256 ids of decision entries appended to the canonical log as part of this submit. Workers must not set this; the submit handler overwrites it. Empty when no decisions[] was submitted. Provides the task -> decisions traceability mirror of the auto-injected 'task:<task_id>' ref.",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "WorkerDecisionDraft": {
+      "type": "object",
+      "description": "M8.3: subset of decision-entry fields that a worker provides. The submit handler fills in the synthesized fields (schema_version, id, ts, adapter, repo) and prepends a deduped 'task:<task_id>' to refs.",
+      "additionalProperties": false,
+      "required": ["decision", "why"],
+      "properties": {
+        "decision": { "type": "string", "minLength": 1 },
+        "why": { "type": "string", "minLength": 1 },
+        "refs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "author": { "type": "string" }
+      }
+    }
+  }
+}

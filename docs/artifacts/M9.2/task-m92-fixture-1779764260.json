@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "id": "task-m92-fixture-1779764260",
+  "project_uuid": "proj-m92",
+  "kind": "research",
+  "target": {
+    "adapter": "claude"
+  },
+  "trust_level": "read-only",
+  "status": "completed",
+  "created_at": "2026-05-26T02:57:40Z",
+  "source": {
+    "adapter": "human",
+    "actor": "operator"
+  },
+  "input": {
+    "instruction": "M9.2 fixture",
+    "repo": "agent-continuity-layer"
+  },
+  "audit": {
+    "transitions": [
+      {
+        "from": null,
+        "to": "queued",
+        "at": "2026-05-26T02:57:40Z",
+        "by": "human"
+      },
+      {
+        "at": "2026-05-26T02:57:40Z",
+        "from": "queued",
+        "to": "claimed",
+        "by": "mcp:mcp-fixture-test"
+      },
+      {
+        "at": "2026-05-26T02:57:40Z",
+        "from": "claimed",
+        "to": "completed",
+        "by": "mcp:mcp-fixture-test"
+      }
+    ]
+  },
+  "claimed_at": "2026-05-26T02:57:40Z",
+  "claimed_by": "mcp:mcp-fixture-test",
+  "claimed_by_adapter": "claude",
+  "result": {
+    "task_id": "task-m92-fixture-1779764260",
+    "status": "done",
+    "worker": "claude",
+    "summary": "M9.2 fixture submit through MCP",
+    "root_cause": null,
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": [],
+    "artifacts": [],
+    "decisions": [
+      {
+        "decision": "MCP submit_result wraps worker.sh",
+        "why": "M9.2 fixture proves M8.3 writeback fires through MCP"
+      }
+    ],
+    "appended_decision_ids": [
+      "595ac70f89f8871f164df43ddd8438b0147a38da07d250824beb666c9c0bfa88"
+    ]
+  },
+  "completed_at": "2026-05-26T02:57:40Z"
+}

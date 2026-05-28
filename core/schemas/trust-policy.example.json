@@ -1,0 +1,25 @@
+{
+  "$comment": "Example trust policy. Copy to ~/.config/agent-continuity/trust-policy.json and edit for your device. Validates against trust-policy.schema.json.",
+  "schema_version": "1.0",
+  "default": {
+    "max_trust_level": "read-only",
+    "allow_kinds": ["research", "explain", "code-review"],
+    "deny_kinds": [],
+    "require_human_approval_for": ["code-change", "elevated"],
+    "allowed_workers": ["claude", "codex"],
+    "files_denied": ["**/.env", "**/.env.*", "**/credentials*", "**/secrets/**", "**/*.pem", "**/*.key"]
+  },
+  "repos": [
+    {
+      "origin": "https://github.com/Lugares-Vrtuales/client-dashboard-v2",
+      "policy": {
+        "max_trust_level": "scoped-write",
+        "allow_kinds": ["code-change", "code-review", "test-run", "research"],
+        "require_human_approval_for": ["elevated"],
+        "allowed_workers": ["codex", "claude"],
+        "files_denied": ["**/.env", "**/credentials*", "src/server/secrets/**"],
+        "expires_at": "2026-12-31T23:59:59Z"
+      }
+    }
+  ]
+}

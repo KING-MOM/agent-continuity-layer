@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "bundle_id": "bundle-m91-T4",
+  "direction": "adapter-to-layer",
+  "created_at": "2026-05-26T02:00:00Z",
+  "from_adapter": {
+    "schema_version": "1.0",
+    "adapter_id": "claude-web-m91",
+    "adapter_type": "web-agent",
+    "adapter": "claude",
+    "display_name": "Claude web M9.1 smoke",
+    "transport": [
+      "bundle"
+    ],
+    "capabilities": {
+      "whoami": true,
+      "read_context": true,
+      "read_decisions": true,
+      "append_decision": "bundle-only",
+      "claim_task": "bundle-only",
+      "submit_result": "bundle-only"
+    },
+    "created_at": "2026-05-26T02:00:00Z"
+  },
+  "bundle_claim": {
+    "task_id": "task-m91-smoke-1779763283",
+    "task_hash": "23757f61a6e9d7f63733af4203b42e9af6c6b1de0f28053e74258fa5243010df",
+    "exported_at": "2026-05-26T02:43:09Z"
+  },
+  "submit_results": [
+    {
+      "task_id": "task-m91-smoke-1779763283",
+      "result": {
+        "task_id": "task-m91-smoke-1779763283",
+        "status": "done",
+        "worker": "claude",
+        "summary": "M9.1 round-trip",
+        "root_cause": null,
+        "findings": [],
+        "changed_files": [],
+        "tests_run": [],
+        "needs_human": [],
+        "artifacts": [],
+        "decisions": [
+          {
+            "decision": "Submitted via bundle",
+            "why": "verifying claim+start+submit"
+          }
+        ]
+      }
+    }
+  ]
+}

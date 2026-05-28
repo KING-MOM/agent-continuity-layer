@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "id": "task-m91-smoke-1779763283",
+  "project_uuid": "proj-m91",
+  "kind": "research",
+  "target": {
+    "adapter": "claude"
+  },
+  "trust_level": "read-only",
+  "status": "completed",
+  "created_at": "2026-05-26T02:41:23Z",
+  "source": {
+    "adapter": "human",
+    "actor": "operator"
+  },
+  "input": {
+    "instruction": "M9.1 smoke",
+    "repo": "agent-continuity-layer"
+  },
+  "audit": {
+    "transitions": [
+      {
+        "from": null,
+        "to": "queued",
+        "at": "2026-05-26T02:41:23Z",
+        "by": "human"
+      },
+      {
+        "at": "2026-05-26T02:43:09Z",
+        "from": "queued",
+        "to": "claimed",
+        "by": "bundle:claude-web-m91"
+      },
+      {
+        "at": "2026-05-26T02:43:09Z",
+        "from": "claimed",
+        "to": "running",
+        "by": "bundle:claude-web-m91"
+      },
+      {
+        "at": "2026-05-26T02:43:09Z",
+        "from": "running",
+        "to": "completed",
+        "by": "bundle:claude-web-m91"
+      }
+    ]
+  },
+  "claimed_at": "2026-05-26T02:43:09Z",
+  "claimed_by": "bundle:claude-web-m91",
+  "claimed_by_adapter": "claude",
+  "started_at": "2026-05-26T02:43:09Z",
+  "result": {
+    "task_id": "task-m91-smoke-1779763283",
+    "status": "done",
+    "worker": "claude",
+    "summary": "M9.1 round-trip",
+    "root_cause": null,
+    "findings": [],
+    "changed_files": [],
+    "tests_run": [],
+    "needs_human": [],
+    "artifacts": [],
+    "decisions": [
+      {
+        "decision": "Submitted via bundle",
+        "why": "verifying claim+start+submit"
+      }
+    ],
+    "appended_decision_ids": [
+      "21ef657b18e1022cfe0a0eb4adc28c7c84d93218e3ec05500ef42b51168af2ff"
+    ]
+  },
+  "completed_at": "2026-05-26T02:43:09Z"
+}

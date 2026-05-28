@@ -1,0 +1,29 @@
+.DS_Store
+*.swp
+*.log
+
+# Local-only runtime state. Anything that contains secrets, host-specific paths,
+# or per-device identity should NOT be committed.
+*.local.json
+*.local.yaml
+.env
+.env.*
+!.env.example
+
+# SSH artifacts must never enter the repo
+id_*
+*.pem
+*.key
+authorized_keys
+
+# Compiled / built artifacts
+dist/
+build/
+node_modules/
+__pycache__/
+*.pyc
+
+# Worker queue spool and other ephemeral state
+.queue/
+.spool/
+*.queue.jsonl

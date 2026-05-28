@@ -1,0 +1,9 @@
+[OK   ] sync (M10)
+         device: device.local-b374be81 (device.local)
+         backend: fake-vm-local at /tmp/m102-vm
+         decisions          current (local: 1, vm: 1)
+         project-registry   current (local: 0, vm: 0, both: 0)
+         context-pinned     current (local: device.local-0d0fbc2a @ 2026-05-26T18:25:13Z  vm: device.local-0d0fbc2a @ 2026-05-26T18:25:13Z)
+[OK   ] m9 adapter portability
+         contract: all 6 operations named in spec
+         schemas: adapter_identity: ok | adapter_bundle: ok

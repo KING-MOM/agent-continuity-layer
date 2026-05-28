@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-05-28T01:48:28Z",
+  "source_head_sha": "cda0b09cc7b0625d3fbcb8e327ddecdf93be09dc",
+  "identity": {
+    "name": "agent-continuity-layer",
+    "charter_one_line": "Durable continuity for AI agents across sessions, tools, devices, and model providers.",
+    "repo_path": "~/.openclaw/workspace/agent-continuity-layer",
+    "branch": "main"
+  },
+  "milestone": {
+    "last_completed": null,
+    "last_completed_primitive": null,
+    "next_major_milestone": {
+      "present": false,
+      "tag": "",
+      "label": ""
+    },
+    "milestone_rule": "Every milestone must strengthen at least one charter continuity primitive; delegation-only work belongs in adapters."
+  },
+  "navigation": {
+    "charter": "CHARTER.md",
+    "roadmap": "docs/roadmap.md",
+    "architecture": "docs/architecture.md",
+    "handoff_vs_continuity": "docs/handoff-vs-continuity.md",
+    "milestone_template": "docs/milestone-template.md"
+  },
+  "non_goals": [
+    "This is not only an OpenClaw plugin.",
+    "This is not only a worker queue.",
+    "This is not an autonomous-agent runner.",
+    "This does not make the VM a config authority.",
+    "This does not give agents broad write authority without trust policy and audit."
+  ],
+  "work_in_flight": {
+    "queue_present": true,
+    "queue_counts": {
+      "queued": 0,
+      "claimed": 0,
+      "running": 0,
+      "awaiting-approval": 0,
+      "completed": 1,
+      "rejected": 1,
+      "failed": 0,
+      "cancelled": 0
+    },
+    "open_tasks": {
+      "queued": [],
+      "claimed": [],
+      "running": [],
+      "awaiting-approval": []
+    }
+  },
+  "trust": {
+    "policy_present": true,
+    "grants_count": 1,
+    "default_policy_summary": "default allows 4 kind(s): code-review, data-extraction, explain, research",
+    "soonest_expiry": "2026-06-01T23:59:59Z"
+  },
+  "recent_activity": [
+    {
+      "sha": "cda0b09",
+      "subject": "chore: initialize sanitized public history",
+      "milestone": null,
+      "primitive": null
+    }
+  ],
+  "next_safe_action": "Privacy cleanup and v0.1.5 release are the active deployment: public examples, docs artifacts, schema examples, and v0.1 reference material have been sanitized to remove operator names, local usernames, hostnames/IPs, org domains, and absolute temp paths. Next: publish v0.1.5 as latest so new installs fetch the clean artifact. Historical releases/tags still need a separate explicit purge/history decision if the operator wants old public snapshots removed rather than merely superseded."
+}

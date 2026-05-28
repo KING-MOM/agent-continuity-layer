@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-05-26T02:54:23Z",
+  "source_head_sha": "0dc3c682f55f2c03b34533a27b9688a731381c6a",
+  "identity": {
+    "name": "agent-continuity-layer",
+    "charter_one_line": "Durable continuity for AI agents across sessions, tools, devices, and model providers.",
+    "repo_path": "/Users/<operator>/.openclaw/workspace/agent-continuity-layer",
+    "branch": "main"
+  },
+  "milestone": {
+    "last_completed": "M9.1",
+    "last_completed_primitive": "adapter portability",
+    "next_major_milestone": {
+      "present": true,
+      "tag": "M10",
+      "label": "VM-Backed Multi-Device Sync v1"
+    },
+    "milestone_rule": "Every milestone must strengthen at least one charter continuity primitive; delegation-only work belongs in adapters."
+  },
+  "navigation": {
+    "charter": "CHARTER.md",
+    "roadmap": "docs/roadmap.md",
+    "architecture": "docs/architecture.md",
+    "handoff_vs_continuity": "docs/handoff-vs-continuity.md",
+    "milestone_template": "docs/milestone-template.md"
+  },
+  "non_goals": [
+    "This is not only an OpenClaw plugin.",
+    "This is not only a worker queue.",
+    "This is not an autonomous-agent runner.",
+    "This does not make the VM a config authority.",
+    "This does not give agents broad write authority without trust policy and audit."
+  ],
+  "work_in_flight": {
+    "queue_present": true,
+    "queue_counts": {
+      "queued": 0,
+      "claimed": 0,
+      "running": 0,
+      "awaiting-approval": 0,
+      "completed": 1,
+      "rejected": 1,
+      "failed": 0,
+      "cancelled": 0
+    },
+    "open_tasks": {
+      "queued": [],
+      "claimed": [],
+      "running": [],
+      "awaiting-approval": []
+    }
+  },
+  "trust": {
+    "policy_present": true,
+    "grants_count": 1,
+    "default_policy_summary": "default allows 4 kind(s): code-review, data-extraction, explain, research",
+    "soonest_expiry": "2026-06-01T23:59:59Z"
+  },
+  "recent_activity": [
+    {
+      "sha": "0dc3c68",
+      "subject": "M9.1: bundle export/ingest \u2014 operator-mediated adapter transport",
+      "milestone": "M9.1",
+      "primitive": "adapter portability"
+    },
+    {
+      "sha": "5eff699",
+      "subject": "M9.0: adapter pattern contract + identity & bundle schemas",
+      "milestone": "M9.0",
+      "primitive": "adapter portability"
+    },
+    {
+      "sha": "1c22732",
+      "subject": "M8.4: decisions log compaction \u2014 derived view, never mutates source",
+      "milestone": "M8.4",
+      "primitive": "decision log"
+    },
+    {
+      "sha": "407e4ee",
+      "subject": "M8.3.2: .mjs bridge carries decisions[] end-to-end",
+      "milestone": "M8.3.2",
+      "primitive": "decision log"
+    },
+    {
+      "sha": "0e0f03f",
+      "subject": "fix(M8.3.1): reject present-but-non-array decisions; correct schema doc",
+      "milestone": "M8.3.1",
+      "primitive": "decision log"
+    }
+  ],
+  "next_safe_action": "M9.2 (MCP tool surface over the six contract operations). Define MCP tool manifests for whoami, read_context, read_decisions, append_decision, claim_task, submit_result. One reference manifest or extension directory. Compatibility tests should show shell and MCP paths produce equivalent artifacts (same context snapshot for read_context, same decision-entry shape for append_decision, same task state transition for submit_result). The bundle CLI shipped in the prior slice already proves the contract works for operator-mediated transport; MCP is the same six operations served over a different transport."
+}
