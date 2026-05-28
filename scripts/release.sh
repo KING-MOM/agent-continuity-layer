@@ -96,12 +96,19 @@ cmd_build() {
   # evidence under docs/artifacts/, backup files, anything under dist/
   # — even though clean-tree means dist/ shouldn't have tracked files,
   # belt-and-braces).
+  # M15.1 reproducible-build path: file list comes from `git ls-files -s`
+  # which gives us (mode, hash, stage, path). We need mode + path; the
+  # _repro_tar.py helper consumes them as TAB-separated lines.
+  #
+  # Exclusion filters stay the same (docs/artifacts/, dist/, *.bak).
   local file_list
-  file_list="$(cd "${REPO_ROOT}" && git ls-files \
-    | grep -v '^docs/artifacts/' \
-    | grep -v '^dist/' \
-    | grep -v '\.bak' \
-    | sort
+  file_list="$(cd "${REPO_ROOT}" && git ls-files -s \
+    | awk '{print $1 "\t" $4}' \
+    | grep -v $'\t''docs/artifacts/' \
+    | grep -v $'\t''dist/' \
+    | grep -v '\.bak'$'\t' \
+    | grep -v '\.bak'$ \
+    | sort -t $'\t' -k 2
   )"
   if [ -z "${file_list}" ]; then
     echo "error: empty file list — git ls-files returned nothing" >&2
@@ -110,32 +117,35 @@ cmd_build() {
   local file_count
   file_count="$(printf "%s\n" "${file_list}" | wc -l | tr -d '[:space:]')"
 
+  # SOURCE_DATE_EPOCH: per https://reproducible-builds.org. Honor the
+  # env var if set; otherwise derive from the current commit's
+  # committer timestamp so two builds at the same SHA produce the
+  # same tarball bytes.
+  local epoch
+  if [ -n "${SOURCE_DATE_EPOCH:-}" ]; then
+    epoch="${SOURCE_DATE_EPOCH}"
+  else
+    epoch="$(cd "${REPO_ROOT}" && git log -1 --format=%ct HEAD)"
+  fi
+
   echo "building agent-continuity v${version}"
   echo "  source:   ${REPO_ROOT}"
   echo "  files:    ${file_count}"
+  echo "  epoch:    ${epoch} (SOURCE_DATE_EPOCH)"
   echo "  tarball:  ${tarball_path}"
 
-  # Build tarball. Files go inside a versioned top-level directory
-  # so extraction lands at agent-continuity-v0.1.0/... rather than
-  # polluting the user's cwd.
-  local stage_dir
-  stage_dir="$(mktemp -d -t agent-continuity-release.XXXXXX)"
-  local stage_root="${stage_dir}/agent-continuity-v${version}"
-  mkdir -p "${stage_root}"
-
-  # Stage each file. Preserves relative paths so e.g.
-  # core/schemas/decision-entry.schema.json -> stage_root/core/schemas/...
-  while IFS= read -r f; do
-    local dest="${stage_root}/${f}"
-    mkdir -p "$(dirname "${dest}")"
-    cp -p "${REPO_ROOT}/${f}" "${dest}"
-  done <<< "${file_list}"
-
-  # tar + gzip the staged directory.
-  ( cd "${stage_dir}" && tar -czf "${tarball_path}" "agent-continuity-v${version}" )
-
-  # Cleanup stage. Keep the tarball + checksum only.
-  rm -rf "${stage_dir}"
+  # Deterministic build via Python helper.
+  # _repro_tar.py reads the file list from stdin and produces a tarball
+  # whose every byte is a function of: (file contents, file mode bits
+  # from git, file path, epoch). No fs mtime, uid, gid, gzip filename,
+  # or gzip mtime leaks in.
+  ( cd "${REPO_ROOT}" && printf "%s\n" "${file_list}" | \
+    python3 "${SCRIPT_DIR}/_repro_tar.py" \
+      --source-dir "${REPO_ROOT}" \
+      --output "${tarball_path}" \
+      --prefix "agent-continuity-v${version}" \
+      --epoch "${epoch}"
+  )
 
   # Compute sha256. Cross-platform: shasum on macOS, sha256sum on Linux.
   local sha
