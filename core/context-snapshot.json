@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-05-28T05:31:24Z",
-  "source_head_sha": "0f363b3ee7269a6edad619a8ad3fa5e3b5e07d4a",
+  "generated_at": "2026-06-04T16:42:57Z",
+  "source_head_sha": "801df15fcbef46342849eff310e28dc0be66f5cc",
   "identity": {
     "name": "agent-continuity-layer",
     "charter_one_line": "Durable continuity for AI agents across sessions, tools, devices, and model providers.",
@@ -59,35 +59,35 @@
   },
   "recent_activity": [
     {
-      "sha": "0f363b3",
-      "subject": "release: v0.1.9",
+      "sha": "801df15",
+      "subject": "M15.1.1: surface build reference + cross-environment reproducibility smoke",
+      "milestone": "M15.1.1",
+      "primitive": null
+    },
+    {
+      "sha": "13ff7bf",
+      "subject": "docs: scrub handoff path examples",
       "milestone": null,
       "primitive": null
     },
     {
-      "sha": "296fa35",
-      "subject": "M15.2: CycloneDX 1.5 SBOM per release",
-      "milestone": "M15.2",
-      "primitive": null
-    },
-    {
-      "sha": "9661da3",
-      "subject": "release: v0.1.8",
+      "sha": "b8f6a82",
+      "subject": "docs: fix README status and MCP wording",
       "milestone": null,
       "primitive": null
     },
     {
-      "sha": "51d390f",
-      "subject": "M16.0: device-to-device handoff \u2014 export/import/inspect",
-      "milestone": "M16.0",
+      "sha": "1c0656a",
+      "subject": "docs: frame continuity as compiled agent memory",
+      "milestone": null,
       "primitive": null
     },
     {
-      "sha": "4819121",
-      "subject": "release: v0.1.7",
+      "sha": "5b2c40c",
+      "subject": "release: v0.2.0",
       "milestone": null,
       "primitive": null
     }
   ],
-  "next_safe_action": "Final slice of the M15 release-integrity arc shipped: cosign keyless OIDC signed releases via GitHub Actions workflow at .github/workflows/release.yml. Bumping to v0.2.0 because the install path changed (breaking): bootstrap.sh and install.sh now require cosign to verify signatures by default, refusing without --no-verify escape. Workflow triggers on v* tag push, builds tarball + sha256 + SBOM, signs each (plus bootstrap.sh) with cosign keyless OIDC, creates the GitHub Release with all signed artifacts. Tier 1 enterprise readiness items now ALL closed: LICENSE, CONTRIBUTING, SECURITY.md, versioning policy, reproducible builds, CycloneDX SBOM, signed releases. Next active arc choices: M14.1 cross-project queries, M16.1 cross-username Claude path rewrite, or production-readiness Tier 2/3 (multi-tenant trust, cryptographic adapter identity, tamper-evident decision log) \u2014 but those require commercial entity + team + capital, not technical work alone."
+  "next_safe_action": "First slice of M17 (local transcript index) shipped: `agent-continuity transcript list/show/path` indexes Claude Code session JSONL files under ~/.claude/projects/ \u2014 read-only inventory exposing session_id, ai_title, cwd, git_branch, started/last, duration, message counts, tool_call breakdown, and JSONL path. Pure stdlib, no network, no writes to substrate. Validates against real local sessions (this conversation comes up correctly tagged 'Design life-agents-unified infrastructure', 285h, 4365 messages, 1513 tool calls). Charter primitive strengthened: handoff ledger + project registry, extended with session-level awareness. Next slices in M17: M17.1 heuristic compile (read JSONL \u2192 append structured decisions to canonical log \u2192 leverages M10 sync for cross-device propagation), M17.2 LLM-based session summary (operator opt-in, real API cost per session). Decision on whether to proceed with M17.1 depends on what the local index reveals about the shape of extractable signal in real transcripts."
 }

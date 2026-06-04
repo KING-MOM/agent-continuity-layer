@@ -1,6 +1,6 @@
 # Project Context Snapshot
 
-_Generated: 2026-05-28T05:31:24Z from 0f363b3ee7269a6edad619a8ad3fa5e3b5e07d4a_
+_Generated: 2026-06-04T16:42:57Z from 801df15fcbef46342849eff310e28dc0be66f5cc_
 
 > This is a generated snapshot. Do not edit by hand — run `scripts/context.sh --write` to refresh. The one operator-maintained field is `next_safe_action`, sourced from `core/context-pinned.json`.
 
@@ -10,7 +10,7 @@ _Generated: 2026-05-28T05:31:24Z from 0f363b3ee7269a6edad619a8ad3fa5e3b5e07d4a_
 - **Charter**: Durable continuity for AI agents across sessions, tools, devices, and model providers.
 - **Repo**: `~/.openclaw/workspace/agent-continuity-layer`
 - **Branch**: `main`
-- **HEAD**: `0f363b3ee7269a6edad619a8ad3fa5e3b5e07d4a`
+- **HEAD**: `801df15fcbef46342849eff310e28dc0be66f5cc`
 
 ## Milestone State
 
@@ -22,7 +22,7 @@ _The roadmap tracks majors only. The next concrete sub-slice (e.g. M7.1) lives i
 
 ## Next Safe Action
 
-Final slice of the M15 release-integrity arc shipped: cosign keyless OIDC signed releases via GitHub Actions workflow at .github/workflows/release.yml. Bumping to v0.2.0 because the install path changed (breaking): bootstrap.sh and install.sh now require cosign to verify signatures by default, refusing without --no-verify escape. Workflow triggers on v* tag push, builds tarball + sha256 + SBOM, signs each (plus bootstrap.sh) with cosign keyless OIDC, creates the GitHub Release with all signed artifacts. Tier 1 enterprise readiness items now ALL closed: LICENSE, CONTRIBUTING, SECURITY.md, versioning policy, reproducible builds, CycloneDX SBOM, signed releases. Next active arc choices: M14.1 cross-project queries, M16.1 cross-username Claude path rewrite, or production-readiness Tier 2/3 (multi-tenant trust, cryptographic adapter identity, tamper-evident decision log) — but those require commercial entity + team + capital, not technical work alone.
+First slice of M17 (local transcript index) shipped: `agent-continuity transcript list/show/path` indexes Claude Code session JSONL files under ~/.claude/projects/ — read-only inventory exposing session_id, ai_title, cwd, git_branch, started/last, duration, message counts, tool_call breakdown, and JSONL path. Pure stdlib, no network, no writes to substrate. Validates against real local sessions (this conversation comes up correctly tagged 'Design life-agents-unified infrastructure', 285h, 4365 messages, 1513 tool calls). Charter primitive strengthened: handoff ledger + project registry, extended with session-level awareness. Next slices in M17: M17.1 heuristic compile (read JSONL → append structured decisions to canonical log → leverages M10 sync for cross-device propagation), M17.2 LLM-based session summary (operator opt-in, real API cost per session). Decision on whether to proceed with M17.1 depends on what the local index reveals about the shape of extractable signal in real transcripts.
 
 ## Navigation
 
@@ -67,9 +67,9 @@ _No open tasks._
 
 | sha | milestone | primitive | subject |
 |---|---|---|---|
-| `0f363b3` | — | — | release: v0.1.9 |
-| `296fa35` | M15.2 | — | M15.2: CycloneDX 1.5 SBOM per release |
-| `9661da3` | — | — | release: v0.1.8 |
-| `51d390f` | M16.0 | — | M16.0: device-to-device handoff — export/import/inspect |
-| `4819121` | — | — | release: v0.1.7 |
+| `801df15` | M15.1.1 | — | M15.1.1: surface build reference + cross-environment reproducibility smoke |
+| `13ff7bf` | — | — | docs: scrub handoff path examples |
+| `b8f6a82` | — | — | docs: fix README status and MCP wording |
+| `1c0656a` | — | — | docs: frame continuity as compiled agent memory |
+| `5b2c40c` | — | — | release: v0.2.0 |
 
