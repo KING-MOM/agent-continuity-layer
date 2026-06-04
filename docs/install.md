@@ -119,24 +119,34 @@ Either way, the substrate is honest: the sha256 detects transport corruption, no
 
 Starting with v0.1.7 the substrate ships **reproducible builds**: rebuilding the tarball at the same commit produces a byte-identical `.tar.gz`. That means you can independently verify GitHub is serving the same artifact the publisher built.
 
-Recipe:
+**Critical:** the reference must be exactly the release tag. `release.sh` derives `SOURCE_DATE_EPOCH` from the current HEAD's committer timestamp; building from a commit even one second past the tag yields a different sha256. The script prints `commit:   <sha> (tag: <name>)` on tagged builds and a loud `WARNING` when HEAD is not on a tag — pay attention to that line.
+
+Recipe (for v0.2.0; substitute the version you want to verify):
 
 ```bash
-# 1. Clone at the release tag
-git clone --depth 1 --branch v0.1.7 https://github.com/KING-MOM/agent-continuity-layer.git
+# 1. Clone, then checkout the EXACT release tag (not just main)
+git clone https://github.com/KING-MOM/agent-continuity-layer.git
 cd agent-continuity-layer
+git checkout v0.2.0
 
-# 2. Build locally
+# 2. Confirm release.sh will build from the right reference
+git log -1 --format='%h %s'    # expect: 5b2c40c release: v0.2.0
+
+# 3. Build locally
 ./scripts/release.sh build
+#    look for "commit: <sha> (tag: v0.2.0)" in the output;
+#    if you see "(NOT on a release tag)" — stop, you're at the wrong ref
 
-# 3. Compute the local sha256
-shasum -a 256 dist/agent-continuity-v0.1.7.tar.gz
+# 4. Compute the local sha256
+shasum -a 256 dist/agent-continuity-v0.2.0.tar.gz
 
-# 4. Fetch GitHub's published sha256
-curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/download/v0.1.7/agent-continuity-v0.1.7.sha256
+# 5. Fetch GitHub's published sha256
+curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/download/v0.2.0/agent-continuity-v0.2.0.sha256
 
-# 5. Compare. The two sha256 values MUST be identical.
+# 6. Compare. The two sha256 values MUST be identical.
 ```
+
+Same recipe works with `git clone --depth 1 --branch v0.2.0 …` (the `--branch` flag accepts tag names, which auto-checks-out at the tag).
 
 If they differ, do not install. Report via GitHub Private Vulnerability Reporting (`SECURITY.md`).
 

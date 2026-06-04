@@ -128,11 +128,45 @@ cmd_build() {
     epoch="$(cd "${REPO_ROOT}" && git log -1 --format=%ct HEAD)"
   fi
 
+  # M15.1.1: surface the exact reference we're building from so an
+  # operator can verify they're at the expected commit / tag. Silent
+  # builds from a non-tagged HEAD are the #1 false-positive on the
+  # "rebuild and compare sha256" verify recipe — a user post-tag
+  # would otherwise get a different sha256 and conclude release was
+  # tampered with.
+  local commit_sha tag_name reference_label
+  commit_sha="$(cd "${REPO_ROOT}" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  tag_name="$(cd "${REPO_ROOT}" && git describe --exact-match --tags HEAD 2>/dev/null || true)"
+  if [ -n "${tag_name}" ]; then
+    reference_label="${commit_sha} (tag: ${tag_name})"
+  else
+    reference_label="${commit_sha} (NOT on a release tag)"
+  fi
+
   echo "building agent-continuity v${version}"
   echo "  source:   ${REPO_ROOT}"
+  echo "  commit:   ${reference_label}"
   echo "  files:    ${file_count}"
   echo "  epoch:    ${epoch} (SOURCE_DATE_EPOCH)"
   echo "  tarball:  ${tarball_path}"
+
+  # Loud warning when HEAD is not on a tag. Output bytes will not
+  # match any published release; users following the verify-from-
+  # source recipe MUST checkout a tag first.
+  if [ -z "${tag_name}" ]; then
+    cat >&2 <<EOF
+
+WARNING: building from a non-tagged HEAD (${commit_sha}). The tarball's
+         sha256 will NOT match any published release. If you intended
+         to verify against the public v${version} release, run:
+             git checkout v${version}
+             scripts/release.sh build
+         and compare the resulting dist/*.sha256 to the GitHub release
+         download. To suppress this warning when intentionally building
+         from a development commit, ignore it.
+
+EOF
+  fi
 
   # Deterministic build via Python helper.
   # _repro_tar.py reads the file list from stdin and produces a tarball

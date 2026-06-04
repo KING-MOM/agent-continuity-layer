@@ -234,6 +234,49 @@ print('  CycloneDX 1.5 valid, hash binding matches tarball')
   return 0
 }
 
+t_local_matches_published_release() {
+  # M15.1.1: when HEAD is exactly on a release tag, the locally-built
+  # tarball's sha256 MUST match the published release's sha256. This
+  # is the cross-machine reproducibility guarantee — same tag + same
+  # build recipe yields the same bytes whether you build on macOS
+  # locally or on the CI workflow.
+  #
+  # Soft-skip when HEAD is not on a tag (development build) or when
+  # there's no network reachability to fetch the published sha256.
+  local tag
+  tag="$(cd "${REPO_ROOT}" && git describe --exact-match --tags HEAD 2>/dev/null || true)"
+  if [ -z "${tag}" ]; then
+    echo "skipped: HEAD not on a release tag (development build)"
+    return 0
+  fi
+  local local_sha
+  local_sha="$(awk '{print $1}' "${SHA_FILE}")"
+  if [ -z "${local_sha}" ]; then
+    echo "FAIL: cannot read local sha256 from ${SHA_FILE}"
+    return 1
+  fi
+  local public_sha_url="https://github.com/KING-MOM/agent-continuity-layer/releases/download/${tag}/agent-continuity-${tag}.sha256"
+  local public_sha
+  public_sha="$(curl -fsSL --max-time 10 "${public_sha_url}" 2>/dev/null | awk '{print $1}')"
+  if [ -z "${public_sha}" ]; then
+    echo "skipped: cannot fetch published sha256 for ${tag} (no network, or release not yet public)"
+    return 0
+  fi
+  if [ "${local_sha}" = "${public_sha}" ]; then
+    echo "  local @ ${tag}: ${local_sha}"
+    echo "  published:    ${public_sha}"
+    echo "  → cross-machine reproducibility holds"
+    return 0
+  fi
+  echo "FAIL: local build at tag ${tag} does NOT match published release"
+  echo "  local:     ${local_sha}"
+  echo "  published: ${public_sha}"
+  echo "  this means reproducibility broke between your environment and CI."
+  echo "  likely causes: HEAD past the tag, modified working tree, or"
+  echo "  toolchain divergence (Python version, tar implementation)."
+  return 1
+}
+
 t_install_from_tarball() {
   # Invoke install.sh from the in-repo copy. (For a hostile audit we
   # could extract the tarball's own install.sh and use that, but the
@@ -357,6 +400,7 @@ t_no_writes_outside_temp_home() {
 
 _run_test "artifact present or buildable" t_artifact_present_or_buildable
 _run_test "reproducible build (sha256 stable across rebuilds at same SHA)" t_reproducible_build
+_run_test "local build at tag matches published release sha256" t_local_matches_published_release
 _run_test "CycloneDX 1.5 SBOM present and bound to tarball hash" t_sbom_present_and_valid
 _run_test "install from tarball" t_install_from_tarball
 _run_test "agent-continuity --version" t_cli_version
