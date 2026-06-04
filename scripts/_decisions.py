@@ -335,6 +335,97 @@ def append_entries_from_worker(
     )
 
 
+def append_entries_from_transcript_compile(
+    partials: Any,
+    *,
+    adapter: str,
+    repo: str,
+    session_id: str,
+) -> list[str]:
+    """M17.1: transcript-compile decision writeback. Each partial must
+    include a 'ts' field — the timestamp of the source tool call from
+    the Claude Code session — so that compiled decisions reflect WHEN
+    the underlying event happened, not when compile ran. This makes
+    re-compiling idempotent: same session + same events → same ids.
+
+    Per-entry processing:
+        - 'ts' comes from the partial (NOT synthesized to now())
+        - 'id' is sha256 of canonical body (deterministic given ts)
+        - 'refs' gets auto_ref='session:<session_id>' prepended
+        - All other fields and validation match _append_entries_internal
+
+    The caller (typically _transcript_compile.py) is responsible for
+    pre-filtering against existing decision ids to avoid re-writing
+    entries that are already in the log. We do not deduplicate inside
+    this function — _decisions.jsonl is append-only and re-appending
+    the same id would be a wasteful but not incorrect write.
+
+    Privacy invariant: the caller must have already applied the
+    transcript-compile privacy denylist (no raw chat content, no
+    secret-pattern matches, no out-of-project file paths). This
+    function trusts the caller's filtering.
+    """
+    if partials is None or partials == []:
+        return []
+    if not isinstance(partials, list):
+        raise WorkerDecisionDraftError(
+            f"decisions must be a list, got {type(partials).__name__}"
+        )
+
+    auto_ref = f"session:{session_id}"
+    entries: list[dict[str, Any]] = []
+    for i, partial in enumerate(partials):
+        # Transcript-compile partials carry a 'ts' field (the source
+        # tool call timestamp). The shared draft validator's allowlist
+        # rejects unknown fields, so we extract ts first and validate
+        # only the remaining shape against the standard draft contract.
+        if not isinstance(partial, dict):
+            raise WorkerDecisionDraftError(
+                f"decisions[{i}]: must be an object, got {type(partial).__name__}"
+            )
+        ts = partial.get("ts")
+        if not isinstance(ts, str) or not ts:
+            raise WorkerDecisionDraftError(
+                f"decisions[{i}]: transcript-compile partials must include "
+                f"'ts' as a non-empty string (the source tool call timestamp)"
+            )
+        draft_partial = {k: v for k, v in partial.items() if k != "ts"}
+        draft_errs = _validate_worker_decision_draft(draft_partial, i)
+        if draft_errs:
+            raise WorkerDecisionDraftError("; ".join(draft_errs))
+
+        entry: dict[str, Any] = {
+            "schema_version": SCHEMA_VERSION,
+            "ts": ts,
+            "adapter": adapter,
+            "repo": repo,
+            "decision": partial["decision"],
+            "why": partial["why"],
+            "refs": _merge_auto_ref(partial.get("refs"), auto_ref),
+        }
+        if "author" in partial:
+            entry["author"] = partial["author"]
+        entry["id"] = _compute_id(entry)
+
+        full_errs = _validate_entry(entry)
+        if full_errs:
+            raise WorkerDecisionDraftError(
+                f"decisions[{i}] synthesized entry failed validation: "
+                + "; ".join(full_errs)
+            )
+        entries.append(entry)
+
+    _acquire_lock()
+    try:
+        with open(DECISIONS_PATH, "a", encoding="utf-8") as f:
+            for entry in entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    finally:
+        _release_lock()
+
+    return [e["id"] for e in entries]
+
+
 def append_entries_from_bundle(
     partials: Any,
     *,

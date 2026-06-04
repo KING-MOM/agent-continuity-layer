@@ -324,6 +324,77 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_compile(args: argparse.Namespace) -> int:
+    """M17.1: heuristic compile of one session's tool calls into structured
+    decision-log entries. Read-only by default (--dry-run); --apply writes
+    new entries to the canonical decisions.jsonl. Idempotent: re-compiling
+    the same session is a no-op."""
+    # Import lazily so `list/show/path` don't pay the import cost.
+    from _transcript_compile import compile_session
+
+    matches = _find_by_prefix(args.session_id)
+    if not matches:
+        print(f"error: no session id starts with {args.session_id!r}", file=sys.stderr)
+        return 1
+    if len(matches) > 1:
+        print(f"error: prefix {args.session_id!r} matched {len(matches)} sessions:", file=sys.stderr)
+        for m in matches[:5]:
+            print(f"  {m.stem}", file=sys.stderr)
+        return 1
+
+    if args.no_privacy_filter and args.apply:
+        print(
+            "WARNING: --no-privacy-filter is set with --apply. Secret patterns "
+            "and sensitive file paths will NOT be filtered. Use only for debugging.",
+            file=sys.stderr,
+        )
+
+    result = compile_session(
+        matches[0],
+        apply=args.apply,
+        no_privacy_filter=args.no_privacy_filter,
+    )
+
+    if args.json:
+        print(json.dumps({
+            "session_id": result.session_id,
+            "candidates": [
+                {
+                    "ts": c.ts,
+                    "decision": c.decision,
+                    "why": c.why,
+                    "refs": c.refs,
+                    "source_type": c.source_type,
+                    "source_tool": c.source_tool,
+                }
+                for c in result.candidates
+            ],
+            "skipped_sensitive": result.skipped_sensitive,
+            "skipped_existing": result.skipped_existing,
+            "written": result.written,
+            "applied": args.apply,
+        }, indent=2, ensure_ascii=False))
+        return 0
+
+    print(f"session:           {result.session_id}")
+    print(f"  candidates:      {len(result.candidates)}")
+    print(f"  skipped (privacy): {result.skipped_sensitive}")
+    print(f"  skipped (already in log): {result.skipped_existing}")
+    if args.apply:
+        print(f"  written:         {len(result.written)}")
+    else:
+        new_count = len(result.candidates) - result.skipped_existing
+        print(f"  would write:     {new_count} (dry-run; pass --apply to commit)")
+
+    if result.candidates and not args.json:
+        print()
+        print("candidates:")
+        for c in result.candidates:
+            tag = c.source_type
+            print(f"  [{tag:24}] {c.ts}  {c.decision}")
+    return 0
+
+
 def cmd_path(args: argparse.Namespace) -> int:
     matches = _find_by_prefix(args.session_id)
     if not matches:
@@ -369,6 +440,27 @@ def main() -> int:
     p_path = sub.add_parser("path", help="emit the absolute path to a session's JSONL")
     p_path.add_argument("session_id", help="session id or unique prefix")
     p_path.set_defaults(func=cmd_path)
+
+    p_compile = sub.add_parser(
+        "compile",
+        help="compile a session's tool calls into structured decision-log entries (M17.1)",
+    )
+    p_compile.add_argument("session_id", help="session id or unique prefix")
+    p_compile.add_argument(
+        "--apply",
+        action="store_true",
+        help="write new entries to decisions.jsonl (default: dry-run, no writes)",
+    )
+    p_compile.add_argument(
+        "--no-privacy-filter",
+        action="store_true",
+        help=(
+            "DEBUG ONLY: disable the secret-pattern denylist and file-path "
+            "denylist. Logs a WARNING when combined with --apply."
+        ),
+    )
+    p_compile.add_argument("--json", action="store_true", help="emit JSON")
+    p_compile.set_defaults(func=cmd_compile)
 
     args = ap.parse_args()
     return args.func(args)

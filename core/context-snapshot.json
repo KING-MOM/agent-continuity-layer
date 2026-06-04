@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-06-04T16:42:57Z",
-  "source_head_sha": "801df15fcbef46342849eff310e28dc0be66f5cc",
+  "generated_at": "2026-06-04T22:44:34Z",
+  "source_head_sha": "5c1130b3d25ecaf2a3b906cc4a139b2b79829feb",
   "identity": {
     "name": "agent-continuity-layer",
     "charter_one_line": "Durable continuity for AI agents across sessions, tools, devices, and model providers.",
@@ -9,7 +9,7 @@
     "branch": "main"
   },
   "milestone": {
-    "last_completed": "M16.0",
+    "last_completed": "M17.0",
     "last_completed_primitive": null,
     "next_major_milestone": {
       "present": false,
@@ -59,6 +59,12 @@
   },
   "recent_activity": [
     {
+      "sha": "5c1130b",
+      "subject": "M17.0: local Claude Code transcript index \u2014 read-only inventory",
+      "milestone": "M17.0",
+      "primitive": null
+    },
+    {
       "sha": "801df15",
       "subject": "M15.1.1: surface build reference + cross-environment reproducibility smoke",
       "milestone": "M15.1.1",
@@ -81,13 +87,7 @@
       "subject": "docs: frame continuity as compiled agent memory",
       "milestone": null,
       "primitive": null
-    },
-    {
-      "sha": "5b2c40c",
-      "subject": "release: v0.2.0",
-      "milestone": null,
-      "primitive": null
     }
   ],
-  "next_safe_action": "First slice of M17 (local transcript index) shipped: `agent-continuity transcript list/show/path` indexes Claude Code session JSONL files under ~/.claude/projects/ \u2014 read-only inventory exposing session_id, ai_title, cwd, git_branch, started/last, duration, message counts, tool_call breakdown, and JSONL path. Pure stdlib, no network, no writes to substrate. Validates against real local sessions (this conversation comes up correctly tagged 'Design life-agents-unified infrastructure', 285h, 4365 messages, 1513 tool calls). Charter primitive strengthened: handoff ledger + project registry, extended with session-level awareness. Next slices in M17: M17.1 heuristic compile (read JSONL \u2192 append structured decisions to canonical log \u2192 leverages M10 sync for cross-device propagation), M17.2 LLM-based session summary (operator opt-in, real API cost per session). Decision on whether to proceed with M17.1 depends on what the local index reveals about the shape of extractable signal in real transcripts."
+  "next_safe_action": "Second slice of M17 (heuristic transcript compile) shipped: `agent-continuity transcript compile <id> [--apply]` reads Claude Code session JSONLs and appends structured decision entries to the canonical decisions.jsonl. Privacy invariant load-bearing \u2014 compiled entries never include raw chat content, never include tool_use input free-form fields (new_string/content/prompt), only structured tool call metadata. Privacy denylist drops events with sensitive file paths (credentials/, .env, .ssh, etc.) or Bash command secret patterns (sk-*, ghp_*, AKIA*, BEGIN PRIVATE KEY). Heuristics cover git commits, releases, tags, package installs, file edits to load-bearing dirs, AskUserQuestion events, and operator-explicit `decisions add` invocations. Idempotent: re-compile is no-op (deterministic sha256 ids via session-time ts). Validated against the real local session 15083edc (this conversation): 566 candidates extracted (305 file-edits, 144 writes, 53 git-commits, 36 ask-user-questions, 14 operator-explicit, 7 git-tags, 6 github-releases, 1 package-install), 0 privacy hits (clean). M17 arc now 2/3 complete \u2014 only M17.2 LLM-based summary remains for purely conversational decisions that have no tool follow-through. M14.1 cross-project queries still pinned as future."
 }
