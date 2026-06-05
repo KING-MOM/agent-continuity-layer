@@ -162,31 +162,62 @@ def _is_load_bearing(rel_path: str) -> bool:
 
 # ----- per-event extractors -----
 
+_HEREDOC_COMMIT_RE = re.compile(
+    r'git\s+commit\b[^|&;]*?-m\s+"\$\(\s*cat\s+<<-?\s*[\'"]?(?P<delim>\w+)[\'"]?\s*\n'
+    r'(?P<body>.*?)'
+    r'\n[ \t]*(?P=delim)\b',
+    re.DOTALL,
+)
+
+
 def _extract_git_commit(input_obj: dict, ts: str, session_id: str) -> CompiledDecision | None:
-    """Heuristic: Bash command containing `git commit -m "..."`."""
+    """Heuristic: Bash command containing `git commit -m "..."`.
+
+    Handles two message styles:
+      1. Flat:    git commit -m "subject"
+      2. Heredoc: git commit -m "$(cat <<'EOF'
+                  subject
+                  ...body
+                  EOF
+                  )"
+    """
     cmd = input_obj.get("command", "")
     if not isinstance(cmd, str):
         return None
     if "git commit" not in cmd:
         return None
-    # Find -m "..." or -m '...' patterns. Defensive — use shlex if possible.
-    try:
-        tokens = shlex.split(cmd, posix=True)
-    except ValueError:
-        # Mismatched quotes, common in multi-line heredocs; skip.
+
+    subject = None
+
+    # Style 2: heredoc-wrapped message. Check first because shlex chokes on these.
+    hd = _HEREDOC_COMMIT_RE.search(cmd)
+    if hd:
+        for line in hd.group("body").split("\n"):
+            line = line.strip()
+            if line:
+                subject = line
+                break
+
+    # Style 1: flat -m "..." / '...'. Use shlex.
+    if subject is None:
+        try:
+            tokens = shlex.split(cmd, posix=True)
+        except ValueError:
+            return None
+        if "commit" not in tokens:
+            return None
+        msg = None
+        for i, tok in enumerate(tokens):
+            if tok in ("-m", "--message") and i + 1 < len(tokens):
+                msg = tokens[i + 1]
+                break
+        if not msg:
+            return None
+        subject = msg.strip().split("\n", 1)[0]
+
+    if not subject:
         return None
-    if "commit" not in tokens:
-        return None
-    # Extract message after -m / --message
-    msg = None
-    for i, tok in enumerate(tokens):
-        if tok in ("-m", "--message") and i + 1 < len(tokens):
-            msg = tokens[i + 1]
-            break
-    if not msg:
-        return None
-    # First line of commit message = subject
-    subject = msg.strip().split("\n", 1)[0]
+
     return CompiledDecision(
         ts=ts,
         decision=_truncate(f"committed: {subject}", 120),

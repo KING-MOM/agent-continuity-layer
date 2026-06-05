@@ -44,10 +44,12 @@ GITHUB_DL="https://github.com/${REPO}/releases/download"
 
 CONNECT_ALL=0
 NO_VERIFY=0
+UPGRADE=0
 for arg in "$@"; do
   case "${arg}" in
     --connect-all) CONNECT_ALL=1 ;;
     --no-verify) NO_VERIFY=1 ;;
+    --upgrade) UPGRADE=1 ;;
     -h|--help)
       cat <<'EOF'
 bootstrap.sh — one-line install for agent-continuity-layer.
@@ -67,6 +69,12 @@ Flags:
                   is temporarily broken. Use of this flag downgrades
                   the install integrity story to sha256-only (corruption
                   detection but no publisher identity verification).
+  --upgrade       Allow replacing an existing active install with a
+                  different version. Without this flag, install.sh
+                  refuses to overwrite an already-active version (the
+                  default protects against silent downgrades). Required
+                  when re-running bootstrap on a machine that already
+                  has any version installed.
   -h, --help      This message.
 EOF
       exit 0
@@ -217,7 +225,11 @@ echo "==> extracting"
 tar -xzf "${TARBALL_NAME}"
 
 echo "==> running install.sh"
-"agent-continuity-v${VERSION}/scripts/install.sh" --from-tarball "${TARBALL_NAME}"
+install_args=( --from-tarball "${TARBALL_NAME}" )
+if [ "${UPGRADE}" = "1" ]; then
+  install_args+=( --upgrade )
+fi
+"agent-continuity-v${VERSION}/scripts/install.sh" "${install_args[@]}"
 
 # ────────────────────────────────────────────────────────────────
 # Optional auto-connect. Off by default — wiring third-party app

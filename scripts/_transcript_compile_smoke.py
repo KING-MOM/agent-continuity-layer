@@ -163,6 +163,36 @@ def check_git_commit(home, env):
         raise SmokeError(f"unexpected decision: {by['git-commit'][0]}")
 
 
+def check_git_commit_heredoc(home, env):
+    """Regression: HEREDOC-wrapped commit messages must extract the subject,
+    not return the literal `$(cat <<'EOF'` token. See M17.1 bugfix on
+    49/53 commits compiled from session 15083edc shipping as garbage."""
+    heredoc_cmd = (
+        'cd /tmp/proj-h && git commit -m "$(cat <<\'EOF\'\n'
+        'release: M17.1.1 heredoc fix\n'
+        '\n'
+        'body line one\n'
+        'body line two\n'
+        'EOF\n'
+        ')"'
+    )
+    _build_jsonl(
+        home, "11111111-aaaa-1111-1111-111111111111",
+        cwd="/tmp/proj-h",
+        encoded="-tmp-proj-h",
+        tool_calls=[{"name": "Bash", "input": {"command": heredoc_cmd}}],
+    )
+    r = _compile_json("11111111", env)
+    by = _candidates_by_type(r)
+    if "git-commit" not in by:
+        raise SmokeError(f"no git-commit candidate from heredoc commit: {by.keys()}")
+    decision = by["git-commit"][0]["decision"]
+    if "release: M17.1.1 heredoc fix" not in decision:
+        raise SmokeError(f"heredoc subject not extracted: {decision!r}")
+    if "$(cat" in decision or "EOF" in decision or "<<" in decision:
+        raise SmokeError(f"heredoc syntax leaked into decision: {decision!r}")
+
+
 def check_github_release(home, env):
     _build_jsonl(
         home, "22220000-2222-2222-2222-222222222222",
@@ -449,6 +479,7 @@ def main() -> int:
     runner = _Runner()
     try:
         runner.check("T1: git commit Bash → git-commit candidate", lambda: check_git_commit(home, env))
+        runner.check("T1b: HEREDOC commit message → subject extracted (regression)", lambda: check_git_commit_heredoc(home, env))
         runner.check("T2: github release Bash → github-release candidate", lambda: check_github_release(home, env))
         runner.check("T3: git tag Bash → git-tag candidate", lambda: check_git_tag(home, env))
         runner.check("T4: package install Bash → package-install candidate", lambda: check_package_install(home, env))
