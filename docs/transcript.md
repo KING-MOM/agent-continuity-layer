@@ -135,14 +135,14 @@ Every compiled entry lands in `decisions.jsonl` with:
 
 ```json
 {
-  "id": "sha256:…",
+  "id": "<hex sha256 of canonical body, no 'sha256:' prefix>",
   "ts": "2026-05-28T10:30:00Z",
   "adapter": "claude",
   "author": "auto:transcript-compile@15083edc",
   "repo": "agent-continuity-layer",
   "decision": "<≤120 chars, structured>",
   "why": "<≤200 chars, structured>",
-  "refs": ["session:15083edc-…", "tool:Bash", "commit:…"]
+  "refs": ["session:15083edc-…", "tool:Bash"]
 }
 ```
 
@@ -157,6 +157,14 @@ agent-continuity decisions list --author "auto:transcript-compile*"
 Each compiled entry's `id` is `sha256(canonical body)`. Since `ts` is sourced from the (deterministic) tool call timestamp — not from compile-time `now()` — the same event in the same session produces the same id every time.
 
 Before appending, the compile reads the existing `decisions.jsonl`, builds a set of present ids, and skips any candidate whose id is already in the log. Re-compiling a session that's already been compiled writes 0 entries.
+
+### Known limitations & semantics
+
+Two behaviors that look like bugs but aren't, surfaced during the M17.1 end-to-end validation against this layer's own session 15083edc:
+
+**1. Retries of identical tool calls produce N distinct entries.** The compiler operates on `tool_use` blocks, one candidate per block. If the operator runs `git tag -a v0.2.2 …` three times — because the first two attempts were denied by a permission classifier, hit a typo, or were interrupted — the compile emits three `tagged: v0.2.2` candidates, one per attempt, with distinct `ts` and therefore distinct ids. Bodies are otherwise byte-identical. This preserves an audit trail of *what was attempted*, which is sometimes what the operator wants. It does mean the log can carry near-duplicates whose only meaningful difference is "this happened more than once." A future `--consolidate-identical` flag is a candidate slice; the current default is fidelity-over-tidiness.
+
+**2. Compiled `committed:` entries do not carry `commit:<sha>` refs.** The privacy invariant forbids reading any tool *result* (stdout/stderr/exit code); the compiler sees only the `Bash` tool's `input.command`, which contains the message subject but not the resulting commit SHA. The refs on a compiled `committed:` entry are therefore `["session:…", "tool:Bash"]` only. To recover the SHA for a compiled commit, correlate by timestamp against `git log --since=<ts> --until=<ts+epsilon> --format='%H %s'` in the originating repo. Hand-typed operator entries (via `agent-continuity decisions add --ref commit:<sha>`) carry the SHA directly because the operator typed it in.
 
 ### What's not in M17.1
 
