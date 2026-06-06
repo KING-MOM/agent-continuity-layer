@@ -369,10 +369,12 @@ def cmd_tool(args: argparse.Namespace) -> int:
 # capture_output=True (see _run), so their stdout cannot leak.
 
 JSONRPC_VERSION = "2.0"
-# Pinned to a stable published MCP protocol version. Clients that need a
-# different version can negotiate on initialize; until we ship that
-# capability, we just declare this one.
-MCP_PROTOCOL_VERSION = "2024-11-05"
+# Pinned to a stable published MCP protocol version. M13.0 shipped on
+# 2024-11-05; bumped to 2025-06-18 in v0.3.0 to surface `structuredContent`
+# + per-tool `outputSchema` so clients can consume parsed JSON directly
+# instead of re-parsing a JSON string out of content[0].text. Back-compat
+# preserved: the content[0].text shape is still emitted byte-identically.
+MCP_PROTOCOL_VERSION = "2025-06-18"
 SERVER_NAME = "agent-continuity"
 
 # JSON-RPC 2.0 standard error codes + the MCP-conventional server-error
@@ -429,14 +431,38 @@ def _mcp_tools_list(_params: dict[str, Any]) -> dict[str, Any]:
     manifest = load_manifest()
     tools = []
     for t in manifest.get("tools", []):
-        tools.append(
-            {
-                "name": t["name"],
-                "description": t.get("description", ""),
-                "inputSchema": t.get("inputSchema", {"type": "object"}),
-            }
-        )
+        entry = {
+            "name": t["name"],
+            "description": t.get("description", ""),
+            "inputSchema": t.get("inputSchema", {"type": "object"}),
+        }
+        if "outputSchema" in t:
+            entry["outputSchema"] = t["outputSchema"]
+        tools.append(entry)
     return {"tools": tools}
+
+
+def _wrap_structured(tool_name: str, result: Any) -> dict[str, Any]:
+    """structuredContent MUST be a JSON object per MCP 2025-06-18.
+    Handlers that return a dict pass through. Lists, scalars, and tools
+    that can return None get a consistent envelope so the outputSchema
+    is straightforward for clients to validate against.
+
+    Envelope rules:
+      claim_task -> {"task": <result>}        (handler returns Task or None;
+                                               always wrapped so the schema
+                                               is stable across both)
+      dict       -> as-is                     (no envelope)
+      list       -> {"entries": [...]}        (used by read_decisions)
+      other      -> {"value": <result>}       (scalar / None guard)
+    """
+    if tool_name == "claim_task":
+        return {"task": result}
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, list):
+        return {"entries": result}
+    return {"value": result}
 
 
 def _mcp_tools_call(params: dict[str, Any]) -> dict[str, Any]:
@@ -459,17 +485,25 @@ def _mcp_tools_call(params: dict[str, Any]) -> dict[str, Any]:
         # error rather than a server crash.
         raise _InvalidParams(str(e))
 
-    # MCP standard: tools/call response is {content: [{type, text}]}.
-    # When the handler returns JSON-serializable data, we encode it as
-    # a JSON string inside `text`, NOT a nested object (per M13.0
-    # sign-off). Indent matches the legacy `mcp.sh tool <name>` CLI
-    # output so the substantive payload is byte-identical between the
-    # two transports.
+    # MCP 2025-06-18 tools/call response shape:
+    #   content[0].text  — JSON string, byte-identical to the legacy
+    #                      `mcp.sh tool <name>` CLI output. Back-compat
+    #                      for clients that haven't migrated yet
+    #                      (including this layer's internal smoke and
+    #                      the local-shell transport).
+    #   structuredContent — the same payload as a JSON object, ready
+    #                       for direct consumption by modern MCP clients
+    #                       without a re-parse step. Lists and scalars
+    #                       are wrapped because the spec requires this
+    #                       field to be an object.
     if result is None:
         text = "null"
     else:
         text = json.dumps(result, indent=2, ensure_ascii=False)
-    return {"content": [{"type": "text", "text": text}]}
+    return {
+        "content": [{"type": "text", "text": text}],
+        "structuredContent": _wrap_structured(name, result),
+    }
 
 
 # Methods that take params and return a JSON-RPC result.

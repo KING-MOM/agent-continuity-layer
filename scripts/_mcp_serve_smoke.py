@@ -180,10 +180,16 @@ def _expect_error(resp: dict, code: int, context: str) -> dict:
 
 
 def check_initialize(c: _Client) -> None:
-    resp = c.send_request("initialize", {"protocolVersion": "2024-11-05"})
+    resp = c.send_request("initialize", {"protocolVersion": "2025-06-18"})
     result = _expect_ok(resp, "initialize")
     if "protocolVersion" not in result:
         raise SmokeError(f"initialize missing protocolVersion: {result}")
+    # Server pins to 2025-06-18 (v0.3.0 bump for structuredContent + outputSchema).
+    if result["protocolVersion"] != "2025-06-18":
+        raise SmokeError(
+            f"initialize protocolVersion mismatch: expected 2025-06-18, "
+            f"got {result['protocolVersion']!r}"
+        )
     if "serverInfo" not in result or "name" not in result["serverInfo"]:
         raise SmokeError(f"initialize missing serverInfo.name: {result}")
     if "capabilities" not in result or "tools" not in result["capabilities"]:
@@ -219,13 +225,29 @@ def check_tools_list(c: _Client) -> None:
     if extra:
         raise SmokeError(f"tools/list has unexpected tools: {sorted(extra)}")
     # Every tool must have an inputSchema (M9.2 contract).
+    # Every tool must have an outputSchema (MCP 2025-06-18 contract).
     for t in result["tools"]:
         if "inputSchema" not in t:
             raise SmokeError(f"tool {t.get('name')} missing inputSchema in tools/list")
+        if "outputSchema" not in t:
+            raise SmokeError(f"tool {t.get('name')} missing outputSchema in tools/list")
+        os_ = t["outputSchema"]
+        if not isinstance(os_, dict) or os_.get("type") != "object":
+            raise SmokeError(
+                f"tool {t.get('name')} outputSchema must declare type:object "
+                f"(structuredContent requires object), got {os_!r}"
+            )
 
 
 def _call_tool(c: _Client, name: str, arguments: dict) -> dict:
-    """Invoke tools/call and verify the MCP envelope shape."""
+    """Invoke tools/call and verify the MCP envelope shape.
+
+    Verifies both:
+      - Back-compat: content[0].type=='text' with a JSON string in .text
+      - MCP 2025-06-18: structuredContent is a JSON object (always present
+        on successful calls, regardless of whether the handler returned
+        dict / list / None).
+    """
     resp = c.send_request("tools/call", {"name": name, "arguments": arguments})
     if "error" in resp:
         return resp
@@ -238,6 +260,15 @@ def _call_tool(c: _Client, name: str, arguments: dict) -> dict:
         raise SmokeError(f"tools/call {name}: content[0].type != 'text': {first}")
     if not isinstance(first.get("text"), str):
         raise SmokeError(f"tools/call {name}: content[0].text not a string: {first}")
+    # MCP 2025-06-18: structuredContent must be a JSON object.
+    if "structuredContent" not in result:
+        raise SmokeError(f"tools/call {name}: missing structuredContent: {result}")
+    sc = result["structuredContent"]
+    if not isinstance(sc, dict):
+        raise SmokeError(
+            f"tools/call {name}: structuredContent not an object "
+            f"(MCP 2025-06-18 requires object): {type(sc).__name__}"
+        )
     return resp
 
 
@@ -246,6 +277,11 @@ def check_tool_whoami(c: _Client) -> None:
     payload = json.loads(resp["result"]["content"][0]["text"])
     if payload.get("adapter_id") != "continuity-layer-local":
         raise SmokeError(f"whoami returned unexpected adapter_id: {payload}")
+    # MCP 2025-06-18: structuredContent must equal the parsed text payload
+    # for dict-returning tools (no envelope).
+    sc = resp["result"]["structuredContent"]
+    if sc != payload:
+        raise SmokeError(f"whoami structuredContent != parsed text: {sc} vs {payload}")
 
 
 def check_tool_read_context(c: _Client) -> None:
@@ -257,6 +293,9 @@ def check_tool_read_context(c: _Client) -> None:
     payload = json.loads(resp["result"]["content"][0]["text"])
     if "schema_version" not in payload:
         raise SmokeError(f"read_context payload missing schema_version: {payload}")
+    sc = resp["result"]["structuredContent"]
+    if sc != payload:
+        raise SmokeError(f"read_context structuredContent != parsed text")
 
 
 def check_tool_read_decisions(c: _Client) -> None:
@@ -269,6 +308,12 @@ def check_tool_read_decisions(c: _Client) -> None:
     payload = json.loads(resp["result"]["content"][0]["text"])
     if not isinstance(payload, list):
         raise SmokeError(f"read_decisions did not return a list: {payload!r}")
+    # structuredContent wraps the list as {entries: [...]}
+    sc = resp["result"]["structuredContent"]
+    if "entries" not in sc or not isinstance(sc["entries"], list):
+        raise SmokeError(f"read_decisions structuredContent missing entries list: {sc}")
+    if sc["entries"] != payload:
+        raise SmokeError(f"read_decisions structuredContent.entries != parsed text")
 
 
 def check_tool_claim_task(c: _Client) -> None:
@@ -290,6 +335,12 @@ def check_tool_claim_task(c: _Client) -> None:
     text = resp["result"]["content"][0]["text"]
     if text != "null" and not text.startswith("{"):
         raise SmokeError(f"claim_task returned unexpected payload: {text!r}")
+    # structuredContent always wraps claim_task as {task: <obj or null>}
+    sc = resp["result"]["structuredContent"]
+    if "task" not in sc:
+        raise SmokeError(f"claim_task structuredContent missing 'task' key: {sc}")
+    if text == "null" and sc["task"] is not None:
+        raise SmokeError(f"claim_task text=null but structuredContent.task != null: {sc}")
 
 
 def check_tool_append_decision_error_path(c: _Client) -> None:

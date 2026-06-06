@@ -9,6 +9,23 @@
         "type": "object",
         "properties": {},
         "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["schema_version", "adapter_id", "adapter_type", "adapter", "display_name", "transport", "capabilities", "created_at"],
+        "properties": {
+          "schema_version": { "type": "string" },
+          "adapter_id": { "type": "string" },
+          "adapter_type": { "type": "string" },
+          "adapter": { "type": "string" },
+          "display_name": { "type": "string" },
+          "transport": { "type": "array", "items": { "type": "string" } },
+          "capabilities": {
+            "type": "object",
+            "additionalProperties": { "type": "boolean" }
+          },
+          "created_at": { "type": "string", "description": "ISO-8601 UTC timestamp" }
+        }
       }
     },
     {
@@ -24,6 +41,11 @@
           }
         },
         "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "description": "Project context snapshot per core/schemas/context-snapshot.schema.json. Top-level keys typically include schema_version, project, milestone, in_flight, non_goals, next_safe_action, see_also.",
+        "additionalProperties": true
       }
     },
     {
@@ -45,6 +67,20 @@
           }
         },
         "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["entries"],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "description": "Decision rows per core/schemas/decision-entry.schema.json. Each row has schema_version, ts, adapter, repo, decision, why, refs, author, id.",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
       }
     },
     {
@@ -72,6 +108,16 @@
           }
         },
         "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["decision_id"],
+        "properties": {
+          "decision_id": {
+            "type": "string",
+            "description": "sha256 hex of the canonical decision body. Same value the M8 append path emits to stdout."
+          }
+        }
       }
     },
     {
@@ -104,6 +150,19 @@
           }
         },
         "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["task"],
+        "properties": {
+          "task": {
+            "description": "The claimed task body (per core/schemas/worker-task.schema.json) or null when no queued task matched the filter.",
+            "oneOf": [
+              { "type": "object", "additionalProperties": true },
+              { "type": "null" }
+            ]
+          }
+        }
       }
     },
     {
@@ -132,6 +191,22 @@
           }
         },
         "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["status", "appended_decision_ids", "task_id"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "post-transition task state (completed / awaiting-approval / failed)"
+          },
+          "appended_decision_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "sha256 ids of decisions appended via the M8.3 writeback path on this submit. Empty array when result.decisions[] was empty or absent."
+          },
+          "task_id": { "type": "string" }
+        }
       }
     }
   ]
