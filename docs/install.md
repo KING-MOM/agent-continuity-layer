@@ -60,6 +60,14 @@ It does NOT touch `~/.config/agent-continuity/`, `~/.cache/agent-continuity/`, `
 
 `--connect-all` is opt-in by design. Writing into Claude Desktop, Cursor, and Zed configs is a real side effect on third-party files the operator owns. Making it explicit means `curl … | bash` never silently edits those configs unless the user typed the flag.
 
+Quickstart note: `agent-continuity quickstart` uses a deliberately separate sandbox namespace under `$HOME`:
+
+- `$HOME/.config/agent-continuity-quickstart/`
+- `$HOME/.local/state/agent-continuity-quickstart/`
+- `$HOME/.cache/agent-continuity-quickstart/`
+
+That means isolated quickstart tests should override `HOME`, not only `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, or `XDG_CACHE_HOME`.
+
 ## Using Claude Code or Codex CLI
 
 Shell-capable agents can run the one-liner for you. Tell them:

@@ -31,7 +31,7 @@
 #     writes leaked outside the temp HOME.
 #
 # Output:
-#   - Full log: docs/artifacts/M12.4/smoke-{TIMESTAMP}.log
+#   - Full log: docs/artifacts/M12.4/smoke-{TIMESTAMP}.txt
 #   - Final summary on stderr + return code
 #
 # Exit code: 0 if all tests pass; 1 if any fail.
@@ -47,9 +47,7 @@ SHA_FILE="${DIST_DIR}/agent-continuity-v${VERSION}.sha256"
 
 ARTIFACT_DIR="${REPO_ROOT}/docs/artifacts/M12.4"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-LOG="${ARTIFACT_DIR}/smoke-${STAMP}.txt"
-
-mkdir -p "${ARTIFACT_DIR}"
+ARTIFACT_LOG="${ARTIFACT_DIR}/smoke-${STAMP}.txt"
 
 # ────────────────────────────────────────────────────────────────
 # Real-HOME fingerprint helpers. We check before the smoke starts
@@ -68,7 +66,11 @@ _fingerprint() {
       "${HOME}/.local/state/agent-continuity-quickstart" \
       "${HOME}/.cache/agent-continuity-quickstart"; do
     if [ -e "${p}" ] || [ -L "${p}" ]; then
+      # The opt-in watcher may update its own audit state asynchronously while
+      # smoke runs; ignore that volatile file so this gate only catches leaks
+      # caused by the smoke/install/quickstart path under test.
       find "${p}" \( -type f -o -type l \) 2>/dev/null \
+        | grep -v '/watcher\.state\.json$' \
         | sort | xargs shasum -a 256 2>/dev/null || true
     else
       echo "ABSENT  ${p}"
@@ -84,6 +86,7 @@ FINGER_BEFORE="$(_fingerprint)"
 
 SB="$(mktemp -d -t agent-continuity-smoke.XXXXXX)"
 FAKE_HOME="${SB}/home"
+LOG="${SB}/smoke-${STAMP}.txt"
 mkdir -p \
   "${FAKE_HOME}/.config" \
   "${FAKE_HOME}/.cache" \
@@ -106,14 +109,17 @@ _with_sandbox_env() {
     "$@"
 }
 
-# Tee everything past this point into the log.
-exec > >(tee -a "${LOG}") 2>&1
+_publish_log() {
+  mkdir -p "${ARTIFACT_DIR}"
+  cp "${LOG}" "${ARTIFACT_LOG}"
+}
 
+_run_smoke() {
 cat <<EOF
 agent-continuity release-smoke — M12.4
 version:   v${VERSION}
 stamp:     ${STAMP}
-log:       ${LOG}
+log:       ${ARTIFACT_LOG}
 sandbox:   ${SB}
 fake HOME: ${FAKE_HOME}
 EOF
@@ -424,14 +430,30 @@ echo "smoke summary: ${PASS}/${TOTAL} passed, ${FAIL} failed"
 for r in "${RESULTS[@]}"; do
   echo "  ${r}"
 done
-echo "log:      ${LOG}"
+echo "log:      ${ARTIFACT_LOG}"
 echo "sandbox:  ${SB}"
 
 if [ "${FAIL}" -eq 0 ]; then
-  rm -rf "${SB}"
   echo "(sandbox cleaned on PASS)"
-  exit 0
+  return 0
 else
   echo "(sandbox preserved at ${SB} for debugging)"
-  exit 1
+  return 1
 fi
+}
+
+# Tee the full run into a temp log first. Publishing to docs/artifacts only
+# after all tests finish keeps release.sh's clean-tree precondition meaningful:
+# the smoke harness must not dirty the repo before it asks release.sh to build.
+set +e
+_run_smoke 2>&1 | tee -a "${LOG}"
+smoke_rc=${PIPESTATUS[0]}
+set -e
+
+_publish_log
+echo "published smoke log: ${ARTIFACT_LOG}"
+
+if [ "${smoke_rc}" -eq 0 ]; then
+  rm -rf "${SB}"
+fi
+exit "${smoke_rc}"
