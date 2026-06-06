@@ -10,8 +10,8 @@
 #
 # Reads ~/.claude/projects/<encoded>/<uuid>.jsonl files. Pure indexing —
 # does not modify transcripts, does not sync, does not write substrate
-# decisions. M17.1 (heuristic compile to decisions) and M17.2 (LLM-based
-# session summary) build on top of this read-only inventory.
+# decisions. M17.1 (shipped) adds heuristic compile-to-decisions. M17.2
+# (LLM-based summary) was considered and dropped — see docs/transcript.md.
 #
 # See docs/transcript.md for the full feature documentation.
 

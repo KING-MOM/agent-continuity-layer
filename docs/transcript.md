@@ -1,6 +1,6 @@
 # Local Claude Code transcript index
 
-`agent-continuity transcript` exposes a read-only inventory of Claude Code session transcripts living locally under `~/.claude/projects/`. M17.0 ships the index; later slices (M17.1, M17.2) build on top of it to compile transcripts into structured decisions.
+`agent-continuity transcript` exposes a read-only inventory of Claude Code session transcripts living locally under `~/.claude/projects/`. M17.0 ships the index; M17.1 builds the heuristic compile on top of it to extract structured decision entries. M17.2 (LLM-based summary) was considered and dropped — see [What was NOT built](#what-was-not-built-m172-dropped) at the bottom.
 
 ## Quick path
 
@@ -55,7 +55,7 @@ That's the "remember this session?" answer in 10 lines: title, what repo, when, 
 
 - Does not modify the transcripts
 - Does not write substrate decisions (M17.1 will)
-- Does not synthesize a textual summary (M17.2 will)
+- Does not synthesize a textual summary (the LLM-based slice was considered and dropped — see bottom)
 - Does not sync transcripts across devices
 - Does not parse message content beyond counting tool calls
 
@@ -168,11 +168,15 @@ Two behaviors that look like bugs but aren't, surfaced during the M17.1 end-to-e
 
 ### What's not in M17.1
 
-## What's coming in M17.2
+## What was NOT built (M17.2 dropped)
 
-- **M17.2 — LLM-based summary** (`agent-continuity transcript summarize <id>`): for sessions where the heuristic compile is insufficient (purely conversational decisions, strategic discussions without tool follow-through), run a configurable LLM over the transcript and append synthesized decision entries. Operator opt-in per session because real money cost. Same privacy invariants as M17.1: never includes raw chat content; only structured JSON summary entries.
+The original M17 plan had a third slice — `agent-continuity transcript summarize <id>` — that would run a configurable LLM over a session transcript to synthesize decision entries for *purely conversational* decisions (strategy discussions, framing choices) that never produced a tool footprint M17.1 could see.
 
-The decisions log is the merge point. Whether a decision was appended by hand, by the heuristic compile, or by an LLM summary, it lives in the same JSONL and syncs via existing M10 infrastructure. The `author` field distinguishes the provenance.
+After M17.1 validated end-to-end against session 15083edc (4365 messages, 590 compiled entries from one session, every load-bearing call captured via commit / edit / ask / explicit-add), the conversational-decision gap M17.2 was supposed to close turned out to be smaller than the design assumed. The operator-explicit path (`agent-continuity decisions add --decision … --why … --ref …`) already covers the cases where a conversational decision needs to land in the log: type it once, it lives forever, no LLM cost, no provider lock-in, no hallucination surface.
+
+Dropping M17.2 keeps the substrate at zero LLM dependency. The decisions log remains the merge point — manually-appended, heuristic-compiled — same JSONL, M10 sync, `author` field distinguishes provenance.
+
+If the gap ever proves real on a future session (you can point at a load-bearing decision M17.1 missed and operator-explicit didn't catch), M17.2 stays on the shelf, not gone.
 
 ## Privacy considerations
 

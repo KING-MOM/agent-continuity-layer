@@ -35,9 +35,9 @@ Per-session output fields:
   - tool_call_counts (per tool name, scanning assistant content blocks)
   - tools_used (set of distinct tool names)
 
-This is M17.0 — read-only inventory. M17.1 will add compile-to-decisions
-(heuristic). M17.2 will add LLM-based session summarization. Both later
-slices depend on this index existing first.
+This is M17.0 — read-only inventory. M17.1 (shipped) adds compile-to-decisions
+via heuristic extraction. M17.2 (LLM-based summarization) was considered and
+dropped — see docs/transcript.md bottom for the reasoning.
 """
 
 from __future__ import annotations
