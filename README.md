@@ -289,6 +289,7 @@ If a change improves execution but not continuity, trust, handoff, artifacts, or
 
 - [`docs/north-star.md`](docs/north-star.md) — two-minute product direction
 - [`docs/connect.md`](docs/connect.md) — connect local adapters in one step
+- [`docs/watch.md`](docs/watch.md) — opt-in agent-home watcher (auto-wire new agents as they appear)
 - [`docs/handoff.md`](docs/handoff.md) — device-to-device state handoff (export / import / inspect)
 - [`docs/transcript.md`](docs/transcript.md) — local Claude Code transcript index (list / show / path)
 - [`docs/quickstart.md`](docs/quickstart.md) — first successful delegated task

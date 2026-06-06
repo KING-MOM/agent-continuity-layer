@@ -45,11 +45,13 @@ GITHUB_DL="https://github.com/${REPO}/releases/download"
 CONNECT_ALL=0
 NO_VERIFY=0
 UPGRADE=0
+WATCH=0
 for arg in "$@"; do
   case "${arg}" in
     --connect-all) CONNECT_ALL=1 ;;
     --no-verify) NO_VERIFY=1 ;;
     --upgrade) UPGRADE=1 ;;
+    --watch) WATCH=1 ;;
     -h|--help)
       cat <<'EOF'
 bootstrap.sh — one-line install for agent-continuity-layer.
@@ -75,6 +77,14 @@ Flags:
                   default protects against silent downgrades). Required
                   when re-running bootstrap on a machine that already
                   has any version installed.
+  --watch         Install the opt-in agent-home watcher (M9.4). On
+                  macOS this registers a user-scope LaunchAgent that
+                  detects new AI-agent homes (Codex, Cursor, Gemini,
+                  etc.) appearing on disk and auto-wires them via
+                  `connect --apply`. Default off — substrate identity
+                  remains "tool", not "background service", unless you
+                  explicitly opt in. Disable any time with
+                  `agent-continuity watch disable`.
   -h, --help      This message.
 EOF
       exit 0
@@ -292,6 +302,28 @@ warn: \`connect all --apply\` exited non-zero.
           agent-continuity connect doctor
 EOF
   fi
+
+  # M9.4: opt-in watcher install. If the operator passed --watch on the
+  # bootstrap one-liner, also enable the LaunchAgent that auto-wires new
+  # agent homes as they appear. Substrate identity stays "tool" by default;
+  # this opt-in flag is the explicit upgrade to "background service" mode.
+  if [ "${WATCH}" = "1" ]; then
+    echo
+    echo "==> enabling opt-in agent-home watcher (M9.4)"
+    if "${SHIM}" watch enable; then
+      echo "✓ watcher enabled"
+    else
+      cat >&2 <<EOF
+
+warn: \`watch enable\` exited non-zero.
+      install + wiring are still complete; diagnose with:
+          agent-continuity watch status
+      disable any time with:
+          agent-continuity watch disable
+EOF
+    fi
+  fi
+
   exit 0
 fi
 

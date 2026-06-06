@@ -47,6 +47,7 @@ SUBCOMMANDS=(
   "reference-agent:minimal SDK demo agent"
   "sync:multi-device sync"
   "migrate:schema migration runner"
+  "watch:opt-in agent-home watcher (auto-wire new agents as they appear)"
 )
 
 usage() {
