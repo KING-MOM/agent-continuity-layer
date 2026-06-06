@@ -239,6 +239,9 @@ install_args=( --from-tarball "${TARBALL_NAME}" )
 if [ "${UPGRADE}" = "1" ]; then
   install_args+=( --upgrade )
 fi
+if [ "${NO_VERIFY}" = "1" ]; then
+  install_args+=( --allow-unsigned-local-build )
+fi
 "agent-continuity-v${VERSION}/scripts/install.sh" "${install_args[@]}"
 
 # ────────────────────────────────────────────────────────────────

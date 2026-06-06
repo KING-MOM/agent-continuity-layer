@@ -259,6 +259,7 @@ def _extract_subtree(tar: tarfile.TarFile, arc_prefix: str, target_dir: pathlib.
     """Extract all members under arc_prefix into target_dir."""
     count = 0
     prefix = arc_prefix.rstrip("/") + "/"
+    target_root = target_dir.resolve()
     for member in tar.getmembers():
         if not member.name.startswith(prefix):
             continue
@@ -267,7 +268,16 @@ def _extract_subtree(tar: tarfile.TarFile, arc_prefix: str, target_dir: pathlib.
         rel = member.name[len(prefix):]
         if not rel:
             continue
-        dest = target_dir / rel
+        rel_path = pathlib.PurePosixPath(rel)
+        if rel_path.is_absolute() or ".." in rel_path.parts:
+            print(f"error: unsafe handoff bundle path: {member.name}", file=sys.stderr)
+            raise ValueError(f"unsafe handoff bundle path: {member.name}")
+        dest = target_dir.joinpath(*rel_path.parts)
+        try:
+            dest.resolve(strict=False).relative_to(target_root)
+        except ValueError as e:
+            print(f"error: handoff bundle path escapes target: {member.name}", file=sys.stderr)
+            raise ValueError(f"handoff bundle path escapes target: {member.name}") from e
         dest.parent.mkdir(parents=True, exist_ok=True)
         fh = tar.extractfile(member)
         if fh is None:

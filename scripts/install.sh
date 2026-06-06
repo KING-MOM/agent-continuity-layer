@@ -8,8 +8,8 @@
 #
 # Honest about what we verify:
 #   - .sha256 detects transport corruption.
-#   - It does NOT prove publisher identity.
-#   - Signed releases are future work (later M12.x).
+#   - v0.2.0+ release tarballs require cosign signature verification.
+#   - unsigned installs are allowed only via an explicit local-build flag.
 #
 # Why a separate .sha256 file (not embedded in this script): an
 # attacker who can rewrite the tarball over the same transport can
@@ -21,6 +21,8 @@
 # Flags:
 #   --from-tarball PATH    install from a local tarball (M12.1 scope)
 #   --upgrade              allow replacing an active different version
+#   --allow-unsigned-local-build
+#                          skip cosign requirement for a local build artifact
 #
 # Writes (and ONLY these locations):
 #   $XDG_DATA_HOME/agent-continuity/v{X.Y.Z}/   install dir
@@ -54,7 +56,7 @@ usage() {
 install.sh — install agent-continuity from a release tarball
 
 Usage:
-  install.sh --from-tarball PATH [--upgrade]
+  install.sh --from-tarball PATH [--upgrade] [--allow-unsigned-local-build]
 
 Locations (XDG; respects env overrides):
   install dir:  ${INSTALL_BASE}/v{VERSION}/
@@ -62,9 +64,14 @@ Locations (XDG; respects env overrides):
   PATH shim:    ${SHIM_PATH}
 
 Verification:
-  Tarball is checked against its sibling .sha256 file (written by
-  release.sh build). This detects transport corruption only and is
-  not a publisher-identity guarantee.
+  Tarball is checked against its sibling .sha256 file. v0.2.0+
+  release tarballs also require sibling .sig and .crt files and are
+  verified with cosign before extraction.
+
+  --allow-unsigned-local-build is for artifacts built locally with
+  scripts/release.sh build and no signing infrastructure. It downgrades
+  verification to sha256-only and should not be used for downloaded
+  release artifacts.
 
   install.sh -h | --help
 EOF
@@ -86,6 +93,23 @@ _verify_sha256() {
       return 1
     fi
   )
+}
+
+_version_ge_0_2_0() {
+  local v="${1#v}" major=0 minor=0 patch=0
+  IFS=. read -r major minor patch <<EOF
+${v}
+EOF
+  major="${major:-0}"
+  minor="${minor:-0}"
+  patch="${patch:-0}"
+  if [ "${major}" -gt 0 ]; then
+    return 0
+  fi
+  if [ "${major}" -eq 0 ] && [ "${minor}" -ge 2 ]; then
+    return 0
+  fi
+  return 1
 }
 
 # Atomic symlink update: write to .tmp.<pid>, then rename onto the
@@ -119,7 +143,7 @@ _atomic_symlink() {
 }
 
 cmd_install() {
-  local tarball="" upgrade=0
+  local tarball="" upgrade=0 allow_unsigned_local_build=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --from-tarball)
@@ -131,6 +155,7 @@ cmd_install() {
         shift 2
         ;;
       --upgrade) upgrade=1; shift ;;
+      --allow-unsigned-local-build) allow_unsigned_local_build=1; shift ;;
       -h|--help) usage; return 0 ;;
       *) echo "error: unknown flag: $1" >&2; echo >&2; usage >&2; return 64 ;;
     esac
@@ -164,19 +189,20 @@ cmd_install() {
     return 1
   fi
 
-  # M15.3: cosign signature verification when signature files are
-  # present alongside the tarball. This is the path used by bootstrap
-  # (which downloads .sig and .crt from the release) AND by manual
-  # operators who downloaded a signed release locally.
-  #
-  # If no .sig/.crt is present, we assume this is a local-build install
-  # (release.sh build on the operator's own machine, no signing
-  # infrastructure) and proceed without signature verification. The
-  # operator who downloaded a signed release manually and forgot to
-  # also download the .sig is the only loose end; that's a UX bug
-  # to surface in docs, not a security gap install.sh can close.
+  # M15.3/M15.4: v0.2.0+ release tarballs require cosign verification
+  # before extraction. Local release.sh builds can opt into the unsigned
+  # path explicitly with --allow-unsigned-local-build; downloaded release
+  # artifacts should never silently degrade to sha256-only.
   local tarball_sig="${tarball_dir}/${tarball_base}.sig"
   local tarball_crt="${tarball_dir}/${tarball_base}.crt"
+  local release_version="" requires_signature=0
+  if [[ "${tarball_base}" =~ ^agent-continuity-v([0-9]+[.][0-9]+[.][0-9]+)([-+._a-zA-Z0-9]*)?[.]tar[.]gz$ ]]; then
+    release_version="${BASH_REMATCH[1]}"
+    if _version_ge_0_2_0 "${release_version}"; then
+      requires_signature=1
+    fi
+  fi
+
   if [ -f "${tarball_sig}" ] && [ -f "${tarball_crt}" ]; then
     if ! command -v cosign >/dev/null 2>&1; then
       cat >&2 <<EOF
@@ -187,10 +213,6 @@ error: cosign signatures are present (${tarball_base}.sig + .crt) but
        Install cosign:
          macOS:  brew install cosign
          linux:  see https://docs.sigstore.dev/cosign/installation/
-
-       Or remove the .sig/.crt files alongside the tarball to skip
-       signature verification (downgrades to sha256-only; not
-       recommended for production).
 EOF
       return 1
     fi
@@ -210,6 +232,29 @@ EOF
       return 1
     fi
     echo "  signature valid"
+  elif [ -f "${tarball_sig}" ] || [ -f "${tarball_crt}" ]; then
+    cat >&2 <<EOF
+error: incomplete cosign signature files for ${tarball_base}
+       expected both:
+         ${tarball_base}.sig
+         ${tarball_base}.crt
+EOF
+    return 1
+  elif [ "${requires_signature}" = "1" ] && [ "${allow_unsigned_local_build}" != "1" ]; then
+    cat >&2 <<EOF
+error: missing cosign signature files for ${tarball_base}
+       v0.2.0+ release tarballs require sibling files:
+         ${tarball_base}.sig
+         ${tarball_base}.crt
+
+       If this is a local artifact you built yourself with
+       scripts/release.sh build, re-run with:
+         --allow-unsigned-local-build
+EOF
+    return 1
+  elif [ "${allow_unsigned_local_build}" = "1" ]; then
+    echo "warn: --allow-unsigned-local-build set; skipping cosign signature verification" >&2
+    echo "      sha256 detects corruption only; do not use this for downloaded releases" >&2
   fi
 
   # Extract to tempdir so we can read VERSION before placing. EXIT
@@ -316,7 +361,7 @@ EOF
 main() {
   local cmd="${1:-}"
   case "${cmd}" in
-    --from-tarball|--upgrade)
+    --from-tarball|--upgrade|--allow-unsigned-local-build)
       cmd_install "$@"
       ;;
     -h|--help|help|"")

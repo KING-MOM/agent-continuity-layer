@@ -289,7 +289,8 @@ t_install_from_tarball() {
   # acceptance criterion is "Installs via scripts/install.sh
   # --from-tarball" — the script under test.)
   if ! _with_sandbox_env "${REPO_ROOT}/scripts/install.sh" \
-       --from-tarball "${TARBALL}"; then
+       --from-tarball "${TARBALL}" \
+       --allow-unsigned-local-build; then
     return 1
   fi
   [ -x "${FAKE_HOME}/.local/bin/agent-continuity" ]

@@ -46,10 +46,11 @@ The bootstrap script:
 1. Queries the GitHub API for the latest release tag.
 2. Downloads `agent-continuity-v{X.Y.Z}.tar.gz` and its sibling `.sha256`.
 3. Verifies the tarball against the sha256 (cross-platform: `shasum -a 256 -c` or `sha256sum -c`).
-4. Aborts on mismatch — nothing is installed.
-5. Extracts to a tempdir, runs `install.sh`, deletes the tempdir.
-6. If `--connect-all` was passed: runs `agent-continuity connect all --apply` to wire Claude Desktop / Cursor / Zed / thin skills. On connect failure, install is still complete and bootstrap exits 0 with a warning pointing at `connect doctor`.
-7. Otherwise: prints next-steps for `agent-continuity connect doctor` and `connect all --apply`.
+4. For v0.2.0+ releases, downloads `.sig` and `.crt` and verifies the tarball's cosign identity before extraction.
+5. Aborts on mismatch or signature failure — nothing is installed.
+6. Extracts to a tempdir, runs `install.sh`, deletes the tempdir.
+7. If `--connect-all` was passed: runs `agent-continuity connect all --apply` to wire Claude Desktop / Cursor / Zed / thin skills. On connect failure, install is still complete and bootstrap exits 0 with a warning pointing at `connect doctor`.
+8. Otherwise: prints next-steps for `agent-continuity connect doctor` and `connect all --apply`.
 
 The install step itself writes only to:
 - `$XDG_DATA_HOME/agent-continuity/v{X.Y.Z}/` (the substrate code)
@@ -84,25 +85,37 @@ If you'd rather see and verify each step before any code runs:
 
 ```bash
 # 1. Pick a release version; the latest is shown on the GitHub releases page
-VERSION=0.1.5
+VERSION=0.4.0
 
-# 2. Download tarball and checksum
+# 2. Download tarball, checksum, signature, and certificate
 curl -L -o "agent-continuity-v${VERSION}.tar.gz" \
   "https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}/agent-continuity-v${VERSION}.tar.gz"
 curl -L -o "agent-continuity-v${VERSION}.sha256" \
   "https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}/agent-continuity-v${VERSION}.sha256"
+curl -L -o "agent-continuity-v${VERSION}.tar.gz.sig" \
+  "https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}/agent-continuity-v${VERSION}.tar.gz.sig"
+curl -L -o "agent-continuity-v${VERSION}.tar.gz.crt" \
+  "https://github.com/KING-MOM/agent-continuity-layer/releases/download/v${VERSION}/agent-continuity-v${VERSION}.tar.gz.crt"
 
 # 3. Verify integrity (macOS uses shasum, Linux often has sha256sum)
 shasum -a 256 -c "agent-continuity-v${VERSION}.sha256"
 # or: sha256sum -c "agent-continuity-v${VERSION}.sha256"
 
-# 4. Extract
+# 4. Verify publisher identity for v0.2.0+ releases
+cosign verify-blob \
+  --certificate "agent-continuity-v${VERSION}.tar.gz.crt" \
+  --signature "agent-continuity-v${VERSION}.tar.gz.sig" \
+  --certificate-identity-regexp '^https://github\.com/KING-MOM/agent-continuity-layer/\.github/workflows/release\.yml@refs/tags/v.*$' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  "agent-continuity-v${VERSION}.tar.gz"
+
+# 5. Extract
 tar -xzf "agent-continuity-v${VERSION}.tar.gz"
 
-# 5. Inspect what install.sh would do (optional but encouraged)
+# 6. Inspect what install.sh would do (optional but encouraged)
 less "agent-continuity-v${VERSION}/scripts/install.sh"
 
-# 6. Run the install
+# 7. Run the install; install.sh verifies the same signature files again
 "agent-continuity-v${VERSION}/scripts/install.sh" --from-tarball "agent-continuity-v${VERSION}.tar.gz"
 ```
 
@@ -115,13 +128,13 @@ agent-continuity doctor --human
 
 ## Trade-off: bootstrap vs manual
 
-The integrity check is identical: both paths download the same `.sha256` file and verify the same tarball against it.
+The release verification is identical: both paths verify the same `.sha256` checksum and, for v0.2.0+ releases, the same cosign signature/certificate pair.
 
 What the manual path adds is **the chance to inspect each artifact before it runs on your machine**. You can read the bootstrap script. You can read `install.sh` inside the extracted tarball. You can grep the python sources for anything suspicious.
 
-What `curl … | bash` loses is exactly that inspection window. If you trust the publisher of the repo (and the GitHub release infrastructure), the practical security level is the same as manual install with `shasum -c`. If you don't, the manual path lets you stop at any step.
+What `curl … | bash` loses is exactly that inspection window. If you trust the publisher of the repo, GitHub release infrastructure, and the bootstrap script currently served by GitHub, the practical security level is the same as manual install with cosign verification. If you don't, the manual path lets you stop before executing anything.
 
-Either way, the substrate is honest: the sha256 detects transport corruption, not publisher identity. An attacker who can rewrite the tarball over the same transport can rewrite the bootstrap script and `.sha256` too. Signed releases are a future trust milestone; we do not pretend otherwise.
+Either way, the substrate is honest: sha256 detects transport corruption; cosign verifies publisher identity for v0.2.0+ release artifacts. `bootstrap.sh --no-verify` and `install.sh --allow-unsigned-local-build` are explicit downgrade paths for emergencies or local builds, not production install paths.
 
 ## Verifying you built from source the same artifact GitHub serves
 

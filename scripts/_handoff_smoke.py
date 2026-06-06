@@ -16,11 +16,13 @@ Then exercises:
       differs from source SKIPS claude restoration and prints warning
   T7  --no-state with no --include-claude refuses (rc=64)
   T8  bundle with mismatched schema_version refuses (rc=2)
+  T9  malicious bundle path traversal refuses and writes nothing outside target
 """
 
 from __future__ import annotations
 
 import json
+import io
 import os
 import pathlib
 import shutil
@@ -255,6 +257,48 @@ def check_schema_version_mismatch_refuses(src, tgt, bundle, fixtures):
         raise SmokeError(f"expected rc=2 for schema_version mismatch, got {p.returncode}")
 
 
+def check_path_traversal_refuses(src, tgt, bundle, fixtures):
+    evil_bundle = bundle.parent / "evil-traversal.tar.gz"
+    escaped = tgt.parent / "escaped-by-handoff.txt"
+    escaped.unlink(missing_ok=True)
+    shutil.rmtree(tgt, ignore_errors=True)
+    tgt.mkdir()
+
+    manifest = {
+        "schema_version": "1.0",
+        "source": {
+            "device_hostname": "evil-fixture",
+            "home": str(tgt),
+            "substrate_version": "0.0.0-smoke",
+        },
+        "included": {
+            "agent_continuity_config": True,
+            "agent_continuity_state": False,
+            "agent_continuity_queue": False,
+            "claude_sessions": False,
+        },
+    }
+    with tarfile.open(evil_bundle, "w:gz") as tar:
+        manifest_bytes = json.dumps(manifest).encode()
+        manifest_info = tarfile.TarInfo("handoff/manifest.json")
+        manifest_info.size = len(manifest_bytes)
+        tar.addfile(manifest_info, io.BytesIO(manifest_bytes))
+
+        payload = b"should not land outside target\n"
+        evil_info = tarfile.TarInfo(
+            "handoff/agent-continuity/config/../../../../escaped-by-handoff.txt"
+        )
+        evil_info.size = len(payload)
+        evil_info.mode = 0o600
+        tar.addfile(evil_info, io.BytesIO(payload))
+
+    p = _run(["import", str(evil_bundle), "--no-backup"], _env(tgt))
+    if p.returncode == 0:
+        raise SmokeError("malicious traversal bundle imported successfully")
+    if escaped.exists():
+        raise SmokeError(f"path traversal wrote outside target: {escaped}")
+
+
 def main() -> int:
     if not HANDOFF_SH.exists():
         print(f"error: {HANDOFF_SH} not found", file=sys.stderr)
@@ -283,6 +327,8 @@ def main() -> int:
                      lambda: check_nothing_to_export_refuses(src, tgt, bundle, fixtures))
         runner.check("T8: schema_version mismatch refuses import (rc=2)",
                      lambda: check_schema_version_mismatch_refuses(src, tgt, bundle, fixtures))
+        runner.check("T9: path traversal bundle refuses import",
+                     lambda: check_path_traversal_refuses(src, tgt, bundle, fixtures))
     finally:
         if not runner.failed:
             shutil.rmtree(src.parent, ignore_errors=True)
