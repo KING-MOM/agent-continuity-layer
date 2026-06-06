@@ -46,6 +46,12 @@ MCP_TARGETS: dict[str, dict[str, Any]] = {
         "section": "context_servers",
         "entry": {"command": MCP_COMMAND, "args": MCP_ARGS},
     },
+    "gemini-cli": {
+        "label": "Gemini CLI",
+        "path": HOME / ".gemini" / "settings.json",
+        "section": "mcpServers",
+        "entry": {"command": MCP_COMMAND, "args": MCP_ARGS},
+    },
 }
 
 SKILL_AGENTS = ("claude", "codex", "openclaw")
@@ -56,6 +62,7 @@ TARGET_CHOICES = [
     "claude-desktop",
     "cursor",
     "zed",
+    "gemini-cli",
     "claude",
     "codex",
     "openclaw-skill",

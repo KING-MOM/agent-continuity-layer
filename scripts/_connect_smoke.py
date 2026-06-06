@@ -47,11 +47,11 @@ def main() -> int:
         checks: list[tuple[str, bool]] = []
 
         dry = must_json([str(REPO_ROOT / "bin" / "agent-continuity"), "connect", "doctor", "--json"], env=env, expected_rc=(2,))
-        checks.append(("dry_run_pending", dry.get("summary", {}).get("pending_writes") == 6))
+        checks.append(("dry_run_pending", dry.get("summary", {}).get("pending_writes") == 7))
         checks.append(("dry_run_no_errors", dry.get("summary", {}).get("errors") == 0))
-        checks.append(("dry_run_seven_entries", dry.get("summary", {}).get("entries") == 7))
+        checks.append(("dry_run_eight_entries", dry.get("summary", {}).get("entries") == 8))
 
-        for target in ("claude-desktop", "cursor", "zed"):
+        for target in ("claude-desktop", "cursor", "zed", "gemini-cli"):
             single = must_json([str(REPO_ROOT / "bin" / "agent-continuity"), "connect", target, "--json"], env=env, expected_rc=(2,))
             checks.append((f"{target}_single_pending", single.get("summary", {}).get("entries") == 1 and single.get("summary", {}).get("pending_writes") == 1))
 
@@ -66,10 +66,12 @@ def main() -> int:
         claude_cfg = home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
         cursor_cfg = home / ".cursor" / "mcp.json"
         zed_cfg = home / ".zed" / "settings.json"
+        gemini_cfg = home / ".gemini" / "settings.json"
         for name, path, section in (
             ("claude_config", claude_cfg, "mcpServers"),
             ("cursor_config", cursor_cfg, "mcpServers"),
             ("zed_config", zed_cfg, "context_servers"),
+            ("gemini_config", gemini_cfg, "mcpServers"),
         ):
             data = json.loads(path.read_text(encoding="utf-8"))
             entry = data.get(section, {}).get("agent-continuity")
@@ -85,7 +87,7 @@ def main() -> int:
         rerun = must_json([str(REPO_ROOT / "bin" / "agent-continuity"), "connect", "doctor", "--json"], env=env, expected_rc=(0,))
         checks.append(("rerun_clean", rerun.get("summary", {}).get("pending_writes") == 0 and rerun.get("summary", {}).get("errors") == 0))
 
-        for target in ("claude-desktop", "cursor", "zed", "claude", "codex", "openclaw-skill", "openclaw"):
+        for target in ("claude-desktop", "cursor", "zed", "gemini-cli", "claude", "codex", "openclaw-skill", "openclaw"):
             single = must_json([str(REPO_ROOT / "bin" / "agent-continuity"), "connect", target, "--json"], env=env, expected_rc=(0,))
             checks.append((f"{target}_single_after_apply", single.get("summary", {}).get("entries") == 1 and single.get("summary", {}).get("errors") == 0))
 

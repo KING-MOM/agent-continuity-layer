@@ -259,8 +259,31 @@ EOF
     echo
     echo "✓ wiring complete"
     echo
-    echo "next step:"
-    echo "  restart any running MCP clients so they pick up the new config"
+    # M9.3: post-install restart nudge. List the MCP clients we just
+    # wired (or confirmed-wired) so the operator knows exactly which
+    # apps to restart. Skill-based agents pick up changes on next
+    # invocation, no restart needed — call that out so the operator
+    # doesn't waste time restarting Codex / Claude Code / OpenClaw.
+    "${SHIM}" connect doctor --json 2>/dev/null | python3 - <<'PYEOF' || true
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+mcp = [
+    e for e in data.get("entries", [])
+    if e.get("kind") == "mcp-config" and e.get("state") == "connected"
+]
+if mcp:
+    print("restart these apps so they pick up the new MCP server:")
+    for e in mcp:
+        label = e.get("label", e.get("name", "?"))
+        path = e.get("path", "?")
+        print(f"  • {label:18}  ({path})")
+    print()
+print("skill-based agents (Claude Code, Codex, OpenClaw) need NO restart")
+print("— they re-invoke the binary on each call and auto-pick up changes.")
+PYEOF
   else
     cat >&2 <<EOF
 
