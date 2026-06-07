@@ -126,6 +126,31 @@ agent-continuity --version
 agent-continuity doctor --human
 ```
 
+## Optional: Private Cross-Device Memory
+
+Install gives you the continuity tooling. To make memory follow you across
+machines, create a separate **private** Git repo for curated memory and point
+the layer at it:
+
+```bash
+git clone https://github.com/YOU/agent-continuity-memory.git "$HOME/agent-continuity-memory"
+agent-continuity git-memory --path "$HOME/agent-continuity-memory" init
+agent-continuity git-memory --path "$HOME/agent-continuity-memory" export
+git -C "$HOME/agent-continuity-memory" add .
+git -C "$HOME/agent-continuity-memory" commit -m "Initial continuity memory export"
+git -C "$HOME/agent-continuity-memory" push -u origin main
+```
+
+On your other Mac, PC, or VM, install the layer, clone the same private memory
+repo, then run:
+
+```bash
+agent-continuity git-memory --path "$HOME/agent-continuity-memory" sync
+```
+
+Do not store private memory in the public `agent-continuity-layer` repo. The
+full guide is [`git-backed-memory.md`](git-backed-memory.md).
+
 ## Trade-off: bootstrap vs manual
 
 The release verification is identical: both paths verify the same `.sha256` checksum and, for v0.2.0+ releases, the same cosign signature/certificate pair.

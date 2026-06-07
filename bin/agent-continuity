@@ -40,6 +40,7 @@ SUBCOMMANDS=(
   "context:project context snapshot"
   "project:local project registry"
   "handoff:device-to-device state handoff (export/import/inspect)"
+  "git-memory:Git-backed curated continuity memory"
   "transcript:local Claude Code transcript index (list/show/path)"
   "worker:worker-task queue"
   "bundle:adapter bundle export/ingest"
