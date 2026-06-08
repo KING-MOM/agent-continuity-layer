@@ -105,6 +105,31 @@ agent-continuity connect codex --apply
 
 More detail: [`docs/connect.md`](docs/connect.md)
 
+For private cross-device memory that stays operator-owned and auditable, create
+a separate private memory repo and use the Git-backed curated memory flow.
+
+First machine, empty memory repo:
+
+```bash
+git clone https://github.com/YOU/agent-continuity-memory.git "$HOME/agent-continuity-memory"
+agent-continuity git-memory --path "$HOME/agent-continuity-memory" init
+agent-continuity git-memory --path "$HOME/agent-continuity-memory" export
+git -C "$HOME/agent-continuity-memory" add .
+git -C "$HOME/agent-continuity-memory" commit -m "Initial continuity memory export"
+git -C "$HOME/agent-continuity-memory" push -u origin main
+```
+
+Second machine, existing memory repo:
+
+```bash
+git clone https://github.com/YOU/agent-continuity-memory.git "$HOME/agent-continuity-memory"
+agent-continuity git-memory --path "$HOME/agent-continuity-memory" sync
+```
+
+The public `agent-continuity-layer` repo contains tooling only. Your private
+memory repo contains curated continuity data. Full setup, second-machine, and
+launchd scheduling instructions: [`docs/git-backed-memory.md`](docs/git-backed-memory.md).
+
 ## Quickstart
 
 No VM. No OpenClaw. No API key. No real LLM. The quickstart runs in a sandbox and leaves your real continuity state untouched.
