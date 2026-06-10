@@ -86,8 +86,9 @@ Why team and not project:
 **Each actor holds a local Ed25519 keypair.** Private key never leaves the actor's machine. Public key is what other actors verify against.
 
 Identity primitives:
-- `actor_id` = fingerprint of public key (e.g. `actor:fp:abc123...`). Stable across machines if the same key is used.
-- `pubkey` = the actor's Ed25519 public key. Distributed via the team's signed manifest.
+- `human_actor_id` = fingerprint of the human's stable identity (the attribution identity used for roles, audit, and team membership). Stable as long as the human is in the team.
+- `device_key_id` = fingerprint of one of the human's per-device Ed25519 public keys. A human may have multiple device keys active simultaneously (laptop, desktop, etc.); each device's private key never leaves that device.
+- `pubkey` = the Ed25519 public key behind a `device_key_id`. Distributed via the team's signed manifest, which binds each `human_actor_id` to a set of currently-valid `device_key_id`s.
 - `team_id` = a UUID generated at team creation. Bound to a team-manifest signed by the founding admin.
 
 **Roles are signed assertions, not config entries.** A `role-assertion` is a small JSON object signed by a team admin's private key, stating "actor X holds role Y in team Z, effective from time T." Verifying any actor's claim of role requires verifying the assertion's signature against a known admin pubkey.
@@ -105,49 +106,67 @@ What this means operationally:
 - Compromised actor: admin revokes by issuing a new role-assertion with `role: revoked` and signing it. Future verifications see the revocation.
 - Lost admin key: this is the recovery problem. v1.0 solves it with **M-of-N admin multisig**: any role-assertion (including key revocation) requires signatures from M of N admins, where M and N are set in the team-manifest. v1.0 ships with M=1, N=1 as the default (single admin) but supports M≥2 for teams that need it.
 
-### 3. Audit integrity is a hash chain
+### 3. Audit integrity is a hash chain via chain-link entries
 
-Every decision entry includes `prev_hash: <sha256 of previous entry's canonical body>`. This forms a linear chain. To insert a fabricated decision retroactively, an attacker would have to recompute every subsequent entry's hash — and if any actor has previously synced a later entry, the divergence is detectable.
+Decision content is signed and immutable. Chain position is established by separate **chain-link** entries that each cite the previous chain-link's hash. The chain is the sequence of chain-links, not a property of the decisions themselves.
 
-The hash chain is **per-team, not per-actor**. Multiple actors writing to the same team's log all contribute to one chain. The chain's order is determined by sync semantics (see Decision 4).
+To insert a fabricated decision retroactively, an attacker would have to:
+- Sign the decision (requires a currently-valid device key bound in the manifest)
+- Create a chain-link placing it in the canonical order (requires the merger's device key, since merge-links are merger-signed)
+- Produce a new audit-anchor naming that chain head (also merger-signed)
+- Convince every other actor's verifier that this anchor is canonical (it's not — every other actor has anchors from prior merges that contradict it)
+
+The hash chain is **per-team, not per-actor**. Multiple actors' decisions all interleave into one chain-link sequence. The chain's order is determined by sync semantics (see Decision 4) and named explicitly by the active audit-anchor (see "Chain epoch and supersession" below).
 
 Why hash chain and not merkle tree:
 - Hash chain is simpler. Merkle gives you efficient inclusion proofs (useful for selective disclosure: "here's proof this one decision is in the log without revealing the rest"). For v1.0, that use case isn't there yet. Linear hash chain is sufficient.
 - Merkle remains a v1.x option if selective-disclosure becomes a real need (e.g. compliance audit where you want to prove "decision X was made on date Y" without exposing decisions A through W).
 
-Optional **audit anchoring**: any actor can periodically publish the latest chain head to a third party (the team's git provider counts; a notary service is a paid-tier offering). An anchor with timestamp T proves the chain existed in this state at time T. Useful for non-repudiation in disputes.
+**Audit anchoring** is integral, not optional. Every successful sync produces a new signed audit-anchor naming the chain head + chain epoch + observed git commit. The latest valid anchor is what defines the canonical chain. Self-anchoring (free) gives team-internal non-repudiation; third-party notarization (paid tier) adds external time attestation.
 
-### 4. Multi-writer sync is convergent
+### 4. Multi-writer sync is convergent via epoch supersession
 
-Two actors append decisions concurrently → both decisions land in the log, ordered by `ts` (the actor's clock at write time). The hash chain is recomputed during merge so both decisions appear in the canonical chain. There is no "last write wins" because the JSONL is genuinely append-only — concurrent appends to the SAME log don't collide; they interleave.
+The hard case: two actors both append decisions before sync. Each, working locally, creates chain-link entries with `chain_position: 1, 2, ...` and an audit-anchor citing their local chain head. Both views are internally consistent. Neither is wrong. The substrate's job is to produce a single canonical merged order without invalidating either actor's prior work.
 
-The merge algorithm:
+The algorithm uses **chain epochs**. Every chain-link and audit-anchor carries a `chain_epoch` integer. Within an epoch, chain-link positions are strictly monotonic and `prev_chain_link_hash` references form a linear chain. Across epochs, an explicit supersession relationship is recorded.
 
-1. `git fetch` from origin.
-2. Read local-only decisions (entries we have, origin doesn't).
-3. Read origin-only decisions (entries origin has, we don't).
-4. Merge into a single sorted-by-ts list.
-5. Recompute `prev_hash` on each entry in the merged order. Note: this changes the *chain* but not the *content* of decisions — each decision's intrinsic id (sha256 of body excluding prev_hash) is stable.
-6. Commit the merged log + signed merge anchor.
-7. Push.
+Concurrent writers each operate in the same epoch they last observed (call it epoch N). When sync detects divergence, the merger:
 
-If two actors generate decisions with identical `ts` (clock skew, batched writes), tiebreak by `actor_id` lexicographic order. Deterministic.
+1. Reads all chain-link entries from local + remote at epoch N.
+2. Validates every decision and chain-link signature against the manifest active at each entry's `manifest_version_observed`. Any failures go to quarantine (see Decision 4 below).
+3. Interleaves valid decisions by `(ts, human_actor_id, device_key_id)` lexicographic tiebreak. Deterministic.
+4. Appends a fresh sequence of chain-link entries at **epoch N+1**, each carrying:
+   - `chain_epoch: N+1`
+   - `chain_position` numbered from 1 within the new epoch
+   - `prev_chain_link_hash` linking to the previous epoch-N+1 link
+   - `is_merge_link: true` on the first epoch-N+1 link
+   - `supersedes_epoch: N` on the first link of the new epoch
+   - `source_actors` listing the human_actor_ids whose decisions are being merged
+5. Signs each new chain-link with the merger's device key.
+6. Publishes a new audit-anchor for epoch N+1 naming the new chain head.
 
-The `id` of each decision is `sha256(canonical body without prev_hash)`. That stays stable across merges. The `prev_hash` is a property of the *chain*, not the *decision*. Two different teams could have the same decision (same id) in different positions in their chains.
+**Old chain-links from epoch N remain in `chain-links.jsonl`.** They are preserved as evidence — they testify that each actor genuinely had a coherent local view before the merge. The canonical chain is whatever the latest audit-anchor names, NOT whatever has the highest chain_position number. A verifier walks back from the latest audit-anchor through its epoch's chain-links; lower-epoch links are reachable for forensics but not authoritative.
 
-This means decisions are content-addressed (stable) and chain-positioned (mutable on merge but verifiable). Verifying a chain doesn't require knowing decisions; verifying a decision doesn't require knowing the chain. Clean separation.
+What this means in practice:
+- A decision can have only one signature (from its author at write time) but can appear in multiple chain-links across epochs. The decision's content_id is stable; its chain-position within the *active* epoch is whatever the latest anchor says.
+- An actor who tries to roll back an anchor (publish an audit-anchor naming a stale epoch as active) is detectable: other actors hold anchors at later epochs with strictly higher chain_epoch values; signatures on those later anchors are valid; the rollback attempt fails verification because the manifest's `latest_anchor_epoch` pointer (updated on every legitimate anchor publication) records the team-known maximum.
+- Pre-merge chain-links are not "wrong" — they were correct given the writer's local view at the time. They become non-canonical when superseded, not invalid.
+
+The `id` of each decision is `sha256(canonical body excluding device_signature)`. That stays stable forever — across merges, across epochs, across team transfers. Decisions are content-addressed; chain-links are epoch-positioned; audit-anchors are the authoritative pointer.
 
 ### 5. Single-tenant installs become "team of one"
 
 Existing v0.x installs migrate to v1.0 by being treated as a one-actor team:
 - A `team_id` is generated locally (`personal-<machine-id>` or operator-supplied).
-- An `actor_id` is derived from a locally-generated Ed25519 key.
-- All existing decisions are rewritten with `team_id` and `actor_id` set, and a chain is computed across them in `ts` order.
-- The hash chain begins from a known-zero `prev_hash` for the first entry.
+- A `human_actor_id` is derived from a locally-generated Ed25519 keypair; the operator can attach an optional `display_name`.
+- A `device_key_id` for this machine is registered in the manifest under the human_actor.
+- All existing decisions are rewritten in-place to v2.0 schema: `team_id`, `human_actor_id`, `device_key_id`, `manifest_version_observed: 1`, `role_assertions_head_observed: <initial>`, `signer_consent: implicit`, and a `device_signature` over the canonical body. A marker field `migrated_from_v0: true` flags these as migration-era signatures (the signature attests to migration provenance, not original authoring intent at decision time).
+- Chain-link entries are generated for every decision in `ts` order, all at `chain_epoch: 1`, signed by the migration tool's device key (which is the operator's only device at migration time).
+- An initial audit-anchor is published naming chain epoch 1's head.
 
 This is a one-time migration on first run of v1.0. Idempotent: re-running is a no-op. Reversible: a `migrate --rollback` keeps the v0.x format archived.
 
-The operational impact for an individual operator: their decisions log gains four fields (`team_id`, `actor_id`, `prev_hash`, `signature`) but nothing else changes. `decisions add` is unchanged. `read_decisions` is unchanged. The substrate keeps doing what it did, with cryptographic integrity added underneath.
+The operational impact for an individual operator: their decisions log gains the v2.0 fields (`team_id`, `human_actor_id`, `device_key_id`, `manifest_version_observed`, `role_assertions_head_observed`, `signer_consent`, `device_signature`), gains a new `chain-links.jsonl` file alongside `decisions.jsonl`, and gains `team-manifest.json` + `role-assertions.jsonl` + `audit-anchors.jsonl`. The CLI surface is unchanged — `decisions add`, `read_decisions`, MCP behavior all keep their semantics, with cryptographic integrity now backing them.
 
 ---
 
@@ -212,23 +231,28 @@ Chain position is a separate signed structure from the decision itself. This is 
   "type": "chain-link",
   "team_id": "<uuid>",
   "decision_id": "<sha256 of the decision being placed>",
-  "chain_position": "<integer, monotonic per team>",
-  "prev_chain_link_hash": "<sha256 of previous chain-link body, or zero for genesis>",
+  "chain_epoch": "<integer, monotonic per team; increments on every merge>",
+  "chain_position": "<integer, monotonic within this epoch (resets per epoch)>",
+  "prev_chain_link_hash": "<sha256 of previous chain-link body in this epoch, or zero for epoch genesis>",
+  "supersedes_epoch": "<integer, nullable — set only on the first chain-link of a new epoch produced by a merge, names the epoch being superseded>",
   "linked_by_human_actor_id": "<who placed this in the chain>",
   "linked_by_device_key_id": "<which device signed the link>",
   "linked_at": "<ISO-8601 UTC>",
   "merge_context": {
     "is_merge_link": "<bool>",
-    "source_actors": ["<actor_id>", "..."],
+    "source_actors": ["<human_actor_id>", "..."],
     "git_commit_observed": "<sha of git-memory repo HEAD at link time>"
   },
   "link_signature": "<base64 Ed25519 of canonical body by linker's device_key>"
 }
 ```
 
-Chain-links live in `<memory-repo>/chain-links.jsonl`. The chain is verified by replaying chain-links in `chain_position` order, validating each link's `prev_chain_link_hash` against the previous entry and each link's signature against the linker's currently-valid device key.
+Chain-links live in `<memory-repo>/chain-links.jsonl`. The active chain is verified by:
+1. Reading the latest valid audit-anchor (highest `chain_epoch` with verifiable signature against current manifest).
+2. Walking back from the anchor's named chain head through chain-links at that epoch only, validating each link's `prev_chain_link_hash` and `link_signature`.
+3. Lower-epoch chain-links remain readable for forensics but are NOT part of the canonical chain. They testify to pre-merge views of the chain; the canonical chain is whatever the latest audit-anchor names.
 
-Key property: **a decision's signature is invariant once written.** Only its chain-link is recomputed during merge. The original decision-author's signature stays valid forever; the merge operation produces NEW chain-link signatures by the merger over a NEW canonical order. Both are verifiable independently.
+Key property: **a decision's content signature is invariant once written.** Only its chain-link epoch and position are subject to merge rewriting. The original decision-author's signature stays valid forever; merges produce NEW chain-link signatures by the merger over a NEW canonical ordering in a NEW epoch. Both are verifiable independently. The previous epoch's chain-links are preserved as historical evidence — they were correct given the writer's local view at the time, and they become non-canonical (not invalid) when superseded.
 
 Quarantine: if a chain-link or decision fails signature verification during sync, the entry is moved to `<memory-repo>/quarantine.jsonl` with:
 
@@ -326,6 +350,7 @@ The manifest is a **registry**, not a state authority for roles. It lists who's 
     "N": 1
   },
   "role_assertions_head": "<sha256 of role-assertions.jsonl tail at manifest_version>",
+  "latest_anchor_epoch_observed": "<integer, highest chain_epoch the manifest signers have witnessed at this manifest_version>",
   "manifest_version": "<integer, increments on every change>",
   "manifest_signature_set": [
     {
@@ -362,22 +387,31 @@ Manifest changes require M-of-N admin signatures collected in `manifest_signatur
 
 Role assertions are append-only in `<memory-repo>/role-assertions.jsonl`. The current role of an actor is determined by the most recent valid assertion.
 
-### NEW: audit-anchor.schema.json (v1.0) — optional
+### NEW: audit-anchor.schema.json (v1.0)
+
+Audit-anchors are integral, not optional. The active chain is defined by the latest valid audit-anchor: it names the current `chain_epoch` and the chain head within that epoch.
 
 ```json
 {
   "schema_version": "1.0",
   "type": "audit-anchor",
   "team_id": "<uuid>",
-  "chain_head_id": "<sha256 of last decision body>",
-  "chain_head_position": "<integer, count of decisions at anchor time>",
+  "chain_epoch": "<integer, names which epoch is being anchored>",
+  "chain_head_link_id": "<sha256 of the chain-link entry at this epoch's tail>",
+  "chain_head_link_position": "<integer, the chain_position of the tail link within this epoch>",
+  "supersedes_epoch": "<integer, nullable — the epoch this anchor replaces as canonical>",
   "anchored_at": "<ISO-8601 UTC>",
-  "anchored_by": "<self|notary-service-url>",
-  "anchor_signature": "<base64>"
+  "anchored_by_human_actor_id": "<who produced this anchor>",
+  "anchored_by_device_key_id": "<which device signed>",
+  "anchor_source": "<self|notary-service-url>",
+  "notary_attestation": "<base64, nullable — present only when anchor_source != self>",
+  "anchor_signature": "<base64 Ed25519 over canonical body by the anchoring device>"
 }
 ```
 
-Audit anchors live in `<memory-repo>/audit-anchors.jsonl`. Self-anchored by team admins is free. Third-party-notarized is the paid-tier service.
+Audit-anchors live in `<memory-repo>/audit-anchors.jsonl`. Self-anchored by team admins (or by the merger at sync completion) is free. Third-party-notarized adds a `notary_attestation` and is the paid-tier service.
+
+**The active anchor is the one with the highest `chain_epoch` that verifies against the current manifest.** A rollback attempt — publishing an anchor with a lower `chain_epoch` than the team-known maximum — fails verification because the team-manifest's `latest_anchor_epoch_observed` field (updated by every legitimate anchor publication) records the maximum seen. An anchor whose `chain_epoch` ≤ `latest_anchor_epoch_observed` is rejected as a stale-rollback attempt; the canonical chain stays at the higher epoch.
 
 ---
 
@@ -387,7 +421,7 @@ All six adapter-contract operations gain actor context. Two options for how the 
 
 **Option A: per-call actor signature.** Every `tools/call` includes a `caller_actor_id` + `caller_signature` over the request. Heavy on the wire, strong on integrity.
 
-**Option B: session-bound actor.** `initialize` includes the caller's actor_id; subsequent calls inherit it; the server validates writes against the session's actor. Lighter, requires session integrity (stdio MCP is already process-bound, so this is fine).
+**Option B: session-bound actor.** `initialize` includes the caller's `human_actor_id` + `device_key_id`; subsequent calls inherit them; the server validates writes against the session's bound identity. Lighter, requires session integrity (stdio MCP is already process-bound, so this is fine).
 
 **Recommendation: Option B for v1.0, with explicit signer-policy gates.** stdio MCP is already a trusted boundary (the process is launched by the operator's own client). Re-asserting identity on every call adds friction without security benefit in that context. Per-call signatures become relevant if/when MCP-over-network ships.
 
@@ -429,17 +463,19 @@ Per-tool impact:
 
 4. **Quarantine on failure**: any entry that fails verification is moved to `quarantine.jsonl` with full provenance (rejection reason, source git commit, raw entry, observed-by). The original entry is NEVER deleted — invalid signatures are evidence of tampering or corruption and must be preserved for incident response.
 
-5. **Interleave decisions** by `ts` with `(human_actor_id, device_key_id)` lexicographic tiebreak. The decision content is untouched; only the chain-link ordering is computed.
+5. **Interleave decisions** by `ts` with `(human_actor_id, device_key_id)` lexicographic tiebreak. The decision content is untouched; only the chain-link ordering and epoch are computed.
 
-6. **Append new chain-links** for any decisions that don't have a chain-link in the merged ordering yet. Each new chain-link is signed by the merger's device key with `is_merge_link: true` and `source_actors` listing every distinct actor whose decisions are being merged. The merger's chain-link signature is "I observed these decisions in this order at this manifest state" — distinct from the original decision authors' content signatures.
+6. **Append new chain-links at epoch N+1** for the full merged ordering. Each new chain-link is signed by the merger's device key with `chain_epoch: N+1`, `chain_position` numbered from 1, `prev_chain_link_hash` linking within the new epoch, `is_merge_link: true`, `source_actors` listing every distinct human_actor whose decisions are being merged, and `supersedes_epoch: N` on the first epoch-N+1 link. The merger's chain-link signature is "I observed these decisions in this canonical order at this manifest state" — distinct from the original decision authors' content signatures.
 
-7. **Sign merge audit-anchor**: append a signed `audit-anchor` entry recording the final chain head + chain position + git commit observed.
+7. **Sign merge audit-anchor at epoch N+1**: append a signed `audit-anchor` entry naming the new chain head, `supersedes_epoch: N`, and the git commit observed at merge time. This anchor is what makes epoch N+1 canonical.
 
-8. **Push**: standard.
+8. **Update team manifest's `latest_anchor_epoch_observed`**: bump manifest_version with the new epoch number. This is the manifest-level rollback defense.
 
-If two actors merge concurrently, the same convergence algorithm applies recursively. The merge result is deterministic regardless of merge order because `(ts, human_actor_id, device_key_id)` gives a total order on decisions, and chain-link recomputation is deterministic.
+9. **Push**: standard.
 
-**What stays auditable**: every original decision signature remains valid forever. Any verifier can re-fetch the decisions, validate signatures against the manifest at each decision's `manifest_version_observed`, and confirm the chain-link order. The merge doesn't invalidate or rewrite history; it appends a signed canonical ordering on top of immutable signed content.
+If two actors merge concurrently (both producing epoch N+1 anchors from epoch N), the algorithm applies recursively. The second merger sees the first's epoch-N+1 anchor + chain-links during pull, validates them, and produces an epoch-N+2 merge by treating epoch-N+1 as the new base. Epoch numbers always increase; the merge tree always converges. Determinism comes from `(ts, human_actor_id, device_key_id)` tiebreaks within each merge, not from coordination between mergers.
+
+**What stays auditable**: every original decision signature remains valid forever. Any verifier can re-fetch the decisions, validate signatures against the manifest at each decision's `manifest_version_observed`, and confirm the canonical chain by following the latest valid audit-anchor backward through its epoch's chain-links. Lower-epoch chain-links are preserved as evidence of pre-merge views; they were correct at the time and remain readable for forensics, but they aren't canonical once superseded.
 
 **What's no longer assumed**: that all actors agree on clock order. The chain-link merger is now the trust anchor for "this is the canonical merged order at the time of this sync," signed by their device key. Disputes about ordering become traceable to specific merge events with named human accountability.
 
@@ -642,7 +678,16 @@ v1.0 does NOT require hosted services to exist. Those ship when (and if) teams a
 
 ## Revision history
 
-**v1.0-rev2 (this version)** — security review pass addressing six findings from an independent reviewer:
+**v1.0-rev3 (this version)** — second security review pass addressing one new finding plus stale-prose cleanup:
+
+| Finding | Severity | Fix |
+|---|---|---|
+| Chain-link supersession / active-chain semantics underspecified — concurrent writers could each create valid `chain_position: 1` links and the spec didn't define which was canonical post-merge | MED | Added `chain_epoch` to chain-link and audit-anchor schemas. The active chain is the one named by the latest valid audit-anchor (highest `chain_epoch`). Merges produce chain-links at epoch N+1 with explicit `supersedes_epoch: N`. Old epochs' chain-links remain as evidence. Rollback defense: manifest carries `latest_anchor_epoch_observed`; anchors at lower epochs are rejected. |
+| Stale "5 hardest decisions" prose (decisions 3, 4, 5) and migration text still described rev1 model (single `actor_id`, `prev_hash` in decision entry, "id formula excludes prev_hash") after rev2 corrected the schemas section only | doc | Rewrote decisions 3-5 to describe the rev2+ model accurately. Updated migration narrative to enumerate the actual v2.0 fields (`team_id`, `human_actor_id`, `device_key_id`, `manifest_version_observed`, `role_assertions_head_observed`, `signer_consent`, `device_signature`) and the migration-era marker. |
+
+The rev3 changes are entirely within the cryptographic + sync model — no new architectural concepts, no policy changes. The conceptual contract (many cryptographically-distinct human actors sharing one team context with verifiable audit) is unchanged; epoch supersession is what makes that contract actually hold under concurrent writes.
+
+**v1.0-rev2** — first security review pass addressing six findings from an independent reviewer:
 
 | Finding | Severity | Fix |
 |---|---|---|
