@@ -160,24 +160,90 @@ All schema versions bump from `1.0` → `2.0`. The migration framework (existing
 ```json
 {
   "schema_version": "2.0",
-  "id": "<sha256 of canonical body without prev_hash + signature>",
-  "ts": "<ISO-8601 UTC>",
+  "id": "<sha256 of canonical body>",
+  "ts": "<ISO-8601 UTC, signer's clock at write time>",
   "team_id": "<uuid>",
-  "actor_id": "<actor:fp:...>",
+  "human_actor_id": "<actor:fp:...>",
+  "device_key_id": "<device-key fingerprint>",
   "adapter": "<claude|codex|...>",
   "author": "<optional human-readable label>",
   "repo": "<string>",
   "decision": "<≤120 chars>",
   "why": "<≤200 chars>",
   "refs": ["<string>", "..."],
-  "prev_hash": "<sha256 of previous entry, or zero for genesis>",
-  "signature": "<base64 Ed25519 signature of (id + prev_hash) by actor's private key>"
+  "manifest_version_observed": "<integer, manifest_version at sign time>",
+  "role_assertions_head_observed": "<sha256 of role-assertions.jsonl tail>",
+  "signer_consent": "<one of: implicit | explicit-confirmed | reviewed-merge>",
+  "device_signature": "<base64 Ed25519 signature of canonical body by device_key>"
 }
 ```
 
-New fields: `team_id`, `actor_id`, `prev_hash`, `signature`.
-Removed fields: none.
-Changed fields: `id` formula now excludes `prev_hash` and `signature` (so id stays stable across re-chained merges).
+**Critical: `prev_hash` is NOT in the decision entry.** Chain position lives in a separate signed structure (see "Chain links" below). The decision's signature covers only the content the signing actor authored and could meaningfully consent to — never anything that a future merger might recompute.
+
+**Identity model (corrected):**
+- `human_actor_id` — stable identity for attribution, role, audit. Never rotates as long as the human is in the team.
+- `device_key_id` — per-device Ed25519 keypair fingerprint. Rotates when a device is decommissioned or compromised. The manifest binds each `human_actor_id` to a set of currently-valid `device_key_id`s.
+
+A decision signed by a `device_key_id` is attributed to the `human_actor_id` that the manifest currently binds it to. Revoking a single device revokes only that key; revoking an actor revokes all their device keys.
+
+**Authorization-against-clock-skew (corrected):**
+- Every decision records `manifest_version_observed` and `role_assertions_head_observed` at sign time.
+- Authorization verifies: at the recorded manifest version + assertions head, did the signing actor's role permit this write?
+- A backdated decision can claim any `ts` it wants, but the embedded manifest/assertions observation can't be retroactively faked — they have to point at a real (verifiable) past state of the team manifest and assertions log. If a compromised actor signs a decision with `manifest_version_observed: N` and the latest non-compromised observation by other actors is `N+5` referencing a revocation of this actor, the backdated decision is rejected as "signed against a manifest version inconsistent with team-observed history."
+
+**Consent semantics:**
+- `signer_consent: implicit` — produced by an automated session signer without explicit human confirmation. Acceptable for free-write entries.
+- `signer_consent: explicit-confirmed` — the human confirmed this specific decision via the CLI/UX before the signer signed it. Required for reviewed-write entries and team-wide assertions.
+- `signer_consent: reviewed-merge` — a senior actor signed during a merge operation acknowledging this decision's inclusion. Used in convergent sync.
+
+A device signature only proves "a process with access to this device's private key produced this." Whether the human consciously approved is asserted by `signer_consent` and enforced by the local signer policy (see "Signer policy" section below).
+
+New fields: `team_id`, `human_actor_id`, `device_key_id`, `manifest_version_observed`, `role_assertions_head_observed`, `signer_consent`, `device_signature`.
+Removed fields: `prev_hash` (moved to chain-link structure), legacy single `actor_id` (split into human + device).
+Changed fields: `id` formula excludes only the `device_signature` itself (so id stays stable; recompute only if content changes).
+
+### NEW: chain-link.schema.json (v1.0)
+
+Chain position is a separate signed structure from the decision itself. This is the key correction that lets decisions stay immutable while merges still produce a verifiable canonical order.
+
+```json
+{
+  "schema_version": "1.0",
+  "type": "chain-link",
+  "team_id": "<uuid>",
+  "decision_id": "<sha256 of the decision being placed>",
+  "chain_position": "<integer, monotonic per team>",
+  "prev_chain_link_hash": "<sha256 of previous chain-link body, or zero for genesis>",
+  "linked_by_human_actor_id": "<who placed this in the chain>",
+  "linked_by_device_key_id": "<which device signed the link>",
+  "linked_at": "<ISO-8601 UTC>",
+  "merge_context": {
+    "is_merge_link": "<bool>",
+    "source_actors": ["<actor_id>", "..."],
+    "git_commit_observed": "<sha of git-memory repo HEAD at link time>"
+  },
+  "link_signature": "<base64 Ed25519 of canonical body by linker's device_key>"
+}
+```
+
+Chain-links live in `<memory-repo>/chain-links.jsonl`. The chain is verified by replaying chain-links in `chain_position` order, validating each link's `prev_chain_link_hash` against the previous entry and each link's signature against the linker's currently-valid device key.
+
+Key property: **a decision's signature is invariant once written.** Only its chain-link is recomputed during merge. The original decision-author's signature stays valid forever; the merge operation produces NEW chain-link signatures by the merger over a NEW canonical order. Both are verifiable independently.
+
+Quarantine: if a chain-link or decision fails signature verification during sync, the entry is moved to `<memory-repo>/quarantine.jsonl` with:
+
+```json
+{
+  "quarantined_at": "<ISO-8601 UTC>",
+  "quarantined_by_human_actor_id": "<who detected the failure>",
+  "rejection_reason": "<signature-invalid | unknown-signer | manifest-skew | ...>",
+  "source_git_commit": "<sha of the commit that introduced the bad entry>",
+  "original_entry_hash": "<sha256 of the entry as observed>",
+  "original_entry": "<the raw entry, preserved verbatim>"
+}
+```
+
+Quarantine is preservation, not deletion. In security, invalid signatures are evidence.
 
 ### worker-task.schema.json (v2.0)
 
@@ -228,31 +294,54 @@ Add `team_id`. Context snapshots are team-scoped. The 60-second snapshot answers
 
 ### NEW: team-manifest.schema.json (v1.0)
 
+The manifest is a **registry**, not a state authority for roles. It lists who's in the team and which device keys are bound to which human actor. Current role is derived solely from `role-assertions.jsonl`. Conflating them was a mistake; the corrected design keeps the two cleanly separate.
+
 ```json
 {
   "schema_version": "1.0",
   "team_id": "<uuid>",
   "created_at": "<ISO-8601 UTC>",
-  "founding_admin_pubkey": "<base64>",
+  "founding_admin_human_actor_id": "<actor:fp:...>",
   "actors": [
     {
-      "actor_id": "<actor:fp:...>",
-      "pubkey": "<base64>",
-      "added_at": "<ISO-8601 UTC>",
-      "added_by_admin_signature": "<base64>",
-      "current_role": "<admin|member|observer|revoked>"
+      "human_actor_id": "<actor:fp:...>",
+      "display_name": "<optional human-readable label>",
+      "device_keys": [
+        {
+          "device_key_id": "<device-key fingerprint>",
+          "pubkey": "<base64 Ed25519 public key>",
+          "device_label": "<e.g. mau-macbook-pro>",
+          "added_at": "<ISO-8601 UTC>",
+          "added_by_admin_signature": "<base64>",
+          "revoked_at": "<ISO-8601 UTC, nullable>"
+        }
+      ]
     }
+  ],
+  "admin_set": [
+    "<human_actor_id>", "..."
   ],
   "multisig": {
     "M": 1,
     "N": 1
   },
+  "role_assertions_head": "<sha256 of role-assertions.jsonl tail at manifest_version>",
   "manifest_version": "<integer, increments on every change>",
-  "manifest_signature": "<signed by current admin keys>"
+  "manifest_signature_set": [
+    {
+      "signed_by_human_actor_id": "<admin>",
+      "signed_by_device_key_id": "<device>",
+      "signature": "<base64>"
+    }
+  ]
 }
 ```
 
-The team-manifest lives at `<memory-repo>/team-manifest.json`. It's the authoritative list of who's in the team and with what role. All other entities reference `team_id` and `actor_id`; verification chains back to this manifest.
+The team-manifest lives at `<memory-repo>/team-manifest.json`. What it answers: "who's in the team, what device keys are valid for each person, who are the admins, what's the multisig threshold." What it does NOT answer: "what role does this person currently hold." That's role-assertions territory.
+
+`role_assertions_head` is a pointer to the role-assertions log tail at the manifest's version. It anchors the two structures: changing roles requires both appending to role-assertions.jsonl AND bumping `manifest_version` with an updated `role_assertions_head`. This makes "manifest skew" detectable — if a decision claims `role_assertions_head_observed: X` but the actual manifest at `manifest_version_observed` recorded `role_assertions_head: Y`, the decision was signed against an inconsistent view and is rejected.
+
+Manifest changes require M-of-N admin signatures collected in `manifest_signature_set` (M=1, N=1 default; raise for teams that need multi-admin recovery).
 
 ### NEW: role-assertion.schema.json (v1.0)
 
@@ -300,32 +389,61 @@ All six adapter-contract operations gain actor context. Two options for how the 
 
 **Option B: session-bound actor.** `initialize` includes the caller's actor_id; subsequent calls inherit it; the server validates writes against the session's actor. Lighter, requires session integrity (stdio MCP is already process-bound, so this is fine).
 
-**Recommendation: Option B for v1.0.** stdio MCP is already a trusted boundary (the process is launched by the operator's own client). Re-asserting identity on every call adds friction without security benefit in that context. Per-call signatures become relevant if/when MCP-over-network ships.
+**Recommendation: Option B for v1.0, with explicit signer-policy gates.** stdio MCP is already a trusted boundary (the process is launched by the operator's own client). Re-asserting identity on every call adds friction without security benefit in that context. Per-call signatures become relevant if/when MCP-over-network ships.
+
+But session-bound identity has a subtler honesty problem that must be made explicit: **a session signature proves "a process with access to the device's private key produced this," not "the human consciously approved."** The substrate must not pretend otherwise. The local signer enforces consent semantics via policy gates, recorded in each decision's `signer_consent` field:
+
+| Decision type | Signer consent required | Default policy |
+|---|---|---|
+| Free-write (personal feedback, context snapshot, project registry update) | `implicit` | Session signs automatically |
+| Reviewed-write (decision claiming team-wide binding, convention, policy change) | `explicit-confirmed` | Session prompts the human via the operator's client; signature is rejected if no explicit confirmation reaches the signer |
+| Team-wide assertion (role assertion, manifest change) | `explicit-confirmed` AND multisig if M>1 | Admin must explicitly confirm; multisig collected before signing |
+| Merge canonical ordering | `reviewed-merge` | Senior actor performing the merge signs as part of the explicit `git-memory sync` operation |
+
+The signer policy lives in `~/.config/agent-continuity/signer-policy.json` (per device) and is part of the per-role `.claude/settings.json` profile. A member's session attempting to sign a reviewed-write entry without explicit confirmation produces a signer error, not a silently auto-signed decision. The "human consciously approved" property is now an enforceable invariant on writes that bind the team, not an unspoken assumption.
 
 Per-tool impact:
 
-- `whoami` — returns the substrate's identity *as seen by this actor*: their `actor_id`, their current role, the team manifest version.
+- `whoami` — returns the substrate's identity *as seen by this caller*: `human_actor_id`, current role (derived from role-assertions head, not manifest), the team manifest version, the device key fingerprint signing this session.
 - `read_context` — filtered to caller's team.
 - `read_decisions` — filtered to caller's team. Admin role can pass `--cross-team` (deferred to v1.1).
-- `append_decision` — server signs the decision with the actor's local key, attaches `prev_hash`, validates the actor's role permits writes.
-- `claim_task` — validates role permits the task's trust_level.
-- `submit_result` — validates the submitting actor matches the claiming actor (or has admin override).
+- `append_decision` — server determines required `signer_consent` based on decision type; obtains consent if needed; signs decision content with the device key; attributes to `human_actor_id`; appends a chain-link signed by the same device key; validates the actor's role at the observed manifest/assertions state.
+- `claim_task` — validates role permits the task's trust_level. Records both `human_actor_id` and `device_key_id`.
+- `submit_result` — validates submitting `human_actor_id` matches the claiming actor (or has admin override). Device key may differ if the human submitted from a different machine than they claimed from.
 
 ---
 
 ## Multi-writer sync impact
 
-`git-memory sync` already pulls + rebases + pushes. v1.0 extends it:
+`git-memory sync` already pulls + rebases + pushes. v1.0 extends it. The corrected algorithm never mutates a decision-entry; it only appends new chain-link entries that establish a merged canonical order.
 
-1. **Pull**: `git pull --rebase` as today.
-2. **Conflict detection on decisions.jsonl**: if the local chain and remote chain have diverged (both added entries since last sync), enter merge mode instead of erroring.
-3. **Merge**: interleave entries by `ts`, recompute `prev_hash` chain, validate each entry's signature against the team manifest (drop any unsignable entries with a loud warning — they're either corrupted or forged).
-4. **Sign merge anchor**: the actor performing the merge signs an `audit-anchor` recording the merged chain head. This is the "I observed the chain in this state at this time" claim.
-5. **Push**: standard.
+1. **Pull**: `git pull --rebase` as today, but the rebase scope excludes `decisions.jsonl`, `chain-links.jsonl`, and `quarantine.jsonl` (all three are content-addressed append-only logs whose merge semantics are application-level, not git-level).
 
-If two actors merge concurrently (rare but possible), the same convergence algorithm applies recursively — the merge result is deterministic regardless of merge order, because `ts` + `actor_id` tiebreak gives a total order on entries.
+2. **Diverged-state detection**: if local has chain-links the remote doesn't and vice-versa, enter convergent-merge mode.
 
-The hash chain stays auditable across merges. Any verifier replaying the chain in `ts` order produces the same `prev_hash` sequence.
+3. **Validate every decision and chain-link** (local + remote) against the manifest active at the entry's recorded `manifest_version_observed`. For each entry:
+   - Look up the device key fingerprint in the manifest at that version.
+   - Verify the signature against that pubkey.
+   - Confirm the device key wasn't already revoked at that manifest version.
+   - Confirm `role_assertions_head_observed` matches the manifest's view at that version.
+
+4. **Quarantine on failure**: any entry that fails verification is moved to `quarantine.jsonl` with full provenance (rejection reason, source git commit, raw entry, observed-by). The original entry is NEVER deleted — invalid signatures are evidence of tampering or corruption and must be preserved for incident response.
+
+5. **Interleave decisions** by `ts` with `(human_actor_id, device_key_id)` lexicographic tiebreak. The decision content is untouched; only the chain-link ordering is computed.
+
+6. **Append new chain-links** for any decisions that don't have a chain-link in the merged ordering yet. Each new chain-link is signed by the merger's device key with `is_merge_link: true` and `source_actors` listing every distinct actor whose decisions are being merged. The merger's chain-link signature is "I observed these decisions in this order at this manifest state" — distinct from the original decision authors' content signatures.
+
+7. **Sign merge audit-anchor**: append a signed `audit-anchor` entry recording the final chain head + chain position + git commit observed.
+
+8. **Push**: standard.
+
+If two actors merge concurrently, the same convergence algorithm applies recursively. The merge result is deterministic regardless of merge order because `(ts, human_actor_id, device_key_id)` gives a total order on decisions, and chain-link recomputation is deterministic.
+
+**What stays auditable**: every original decision signature remains valid forever. Any verifier can re-fetch the decisions, validate signatures against the manifest at each decision's `manifest_version_observed`, and confirm the chain-link order. The merge doesn't invalidate or rewrite history; it appends a signed canonical ordering on top of immutable signed content.
+
+**What's no longer assumed**: that all actors agree on clock order. The chain-link merger is now the trust anchor for "this is the canonical merged order at the time of this sync," signed by their device key. Disputes about ordering become traceable to specific merge events with named human accountability.
+
+**Backdating defense**: an actor who tries to backdate a decision (e.g. to appear pre-revocation) signs it with their current device key but is forced to record `manifest_version_observed` at sign time. If their current observed manifest version already shows their revocation, the decision is rejected on every verifier's machine, regardless of the claimed `ts`. The attack surface for clock-skew exploits collapses to "the actor's local manifest was somehow stale at sign time" — which is detectable because every other actor's view of the manifest contradicts the backdated claim.
 
 ---
 
@@ -483,13 +601,15 @@ This boundary is enforceable because:
 
 3. **Role inheritance.** Can a role grant a subset of capabilities to another role? v1.0 says no (flat role list per team). v1.x may need it for larger teams.
 
-4. **Time authority.** Hash chain order depends on actor clocks. Maliciously skewed clocks could attempt to fork the chain. v1.0 trusts actor clocks (because team members trust each other by definition). v1.x may need NTP-attested timestamps or signed time anchors.
+4. **Time authority.** Backdating attacks via actor clock skew are now bounded by `manifest_version_observed` + `role_assertions_head_observed` — an actor can't claim a past `ts` while observing a future manifest state. The residual risk is that the actor's local manifest is genuinely stale (network partition, offline operation), which would let them sign decisions inconsistent with the team's current view. v1.0 accepts this — partition healing produces an authoritative manifest at sync time, and decisions signed against pre-partition state get reconciled or quarantined. v1.x may add NTP-attested timestamps or external time anchors if the offline-actor case becomes adversarial.
 
-5. **Key rotation cadence.** Best practice is to rotate keys periodically. v1.0 supports key rotation via a special role-assertion ("actor X's new pubkey is Z, signed by old pubkey or admin"). UX for this is deferred to phase 3+.
+5. **Key rotation cadence.** Best practice is to rotate keys periodically. v1.0 supports per-device key rotation via a manifest update: revoke the old `device_key_id`, add a new one, both signed by either the human's other active device or by an admin if the rotating device is the only one. UX for this is deferred to phase 3+. Decisions signed by a revoked device key remain valid (the signature still verifies against the historical manifest version they recorded); future decisions must use a currently-valid device key.
 
-6. **Multi-device per actor.** mau-on-laptop and mau-on-desktop — same actor, two private keys? v1.0 says yes, but the device keypairs are independently registered in the team manifest as separate actor_ids (with a human-readable shared label). Cleaner than trying to sync a private key across devices.
+6. **Multi-device per actor — RESOLVED.** Earlier draft conflated "actor" with "device key" and produced `mau-on-laptop` and `mau-on-desktop` as separate actor identities. The corrected model is `human_actor_id` (stable) + multiple `device_key_id`s bound to that human in the manifest. Decisions are signed by a device key but attributed to the human. Revoking a device revokes only that key; revoking the human revokes all their device keys. Audit and accountability are now consistently "human as actor" with device as the signing instrument.
 
-7. **Backward compat for v0.x readers.** A v0.x install reading a v1.0 decisions.jsonl — does it fail loudly or skip unknown fields? v1.0 spec says: append v2.0 schema but keep v1.0 fields parseable. v0.x readers ignore `prev_hash` + `signature` silently. The cost: v0.x can't verify chain integrity but can still read decisions.
+7. **Backward compat for v0.x readers.** A v0.x install reading a v1.0 decisions.jsonl — does it fail loudly or skip unknown fields? v1.0 spec says: append v2.0 schema but keep v1.0 fields parseable. v0.x readers ignore the new fields silently. The cost: v0.x can't verify chain integrity but can still read decisions. The migration tool offers a `--strict-v2` mode that refuses v1-style entries for teams that want to enforce post-migration purity.
+
+8. **Migration of pre-multi-tenant signatures.** Existing single-tenant decisions have no signatures at all. Migration generates a "v0-legacy" wrapper signature using the operator's newly-generated device key, with `signer_consent: implicit` and a marker `migrated_from_v0: true`. These entries are signed but flagged as "pre-multi-tenant content; the signature attests to migration provenance, not original authoring intent."
 
 ---
 
@@ -517,6 +637,25 @@ v1.0 ships when:
 8. Smoke suite covers single-actor compat, two-actor concurrent writes, role revocation, key rotation, chain integrity verification.
 
 v1.0 does NOT require hosted services to exist. Those ship when (and if) teams ask for them.
+
+---
+
+## Revision history
+
+**v1.0-rev2 (this version)** — security review pass addressing six findings from an independent reviewer:
+
+| Finding | Severity | Fix |
+|---|---|---|
+| Signature covered `prev_hash`, which merge mutated — original signatures unverifiable after any merge | HIGH | Decision signature now covers only canonical content (`id` excludes signature itself). Chain position lives in separate signed `chain-link` entries produced by the merger. Original signatures stay valid forever; merge appends new signed structure. |
+| Authorization ordering relied on actor clocks — backdating attack vector | HIGH/MED | Every decision records `manifest_version_observed` + `role_assertions_head_observed` at sign time. Authorization checks against the recorded manifest state, not the claimed `ts`. Backdating now requires forging an observation of a past manifest state that contradicts other actors' observations — detectable on every sync. |
+| Manifest carried `current_role` per actor AND role-assertions log was the source of truth — divergence risk | MED | Manifest is now a registry only (who's in the team, device keys, admin set, multisig). Current role derives solely from role-assertions.jsonl. Manifest carries `role_assertions_head` pointer to bind the two structures at each manifest version. |
+| Merge "dropped" unsignable entries — destroyed evidence | MED | Quarantine schema added. Invalid entries preserved in `quarantine.jsonl` with rejection reason, source git commit, raw entry. Never deleted. |
+| MCP session-bound identity = "process with signer access produced this," not "human consciously approved" | MED | Added `signer_consent` field on every decision (`implicit` / `explicit-confirmed` / `reviewed-merge`). Local signer policy enforces consent requirements per decision type. Reviewed-writes and team-wide assertions REQUIRE explicit human confirmation, enforced at the signer layer, not just documented. |
+| "Each human is one actor" contradicted by "device keys are separate actor_ids" | MED | Resolved: `human_actor_id` is the stable attribution identity; `device_key_id` is per-device signing material. Manifest binds each human to a set of currently-valid device keys. Decisions attributed to humans, signed by devices. |
+
+The revision changes the schemas and the merge algorithm but does not change the conceptual model: many cryptographically-distinct human actors sharing one team context, with cryptographic identity, role-based authorization, and a verifiable audit chain. The corrections make those promises actually hold rather than just declarative.
+
+**v1.0-rev1** — initial spec, integrating four-layer framing + memory-poisoning/blast-radius/drift defenses from a separate review.
 
 ---
 
