@@ -119,7 +119,18 @@ git -C "$HOME/agent-continuity-memory" commit -m "Initial continuity memory expo
 git -C "$HOME/agent-continuity-memory" push -u origin main
 ```
 
-Second machine, existing memory repo:
+Second machine, existing memory repo — **one-shot via the bootstrap one-liner (v0.4.2+):**
+
+```bash
+curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh \
+  | bash -s -- \
+      --connect-all --watch --upgrade \
+      --memory-repo git@github.com:YOU/agent-continuity-memory.git
+```
+
+That one command installs the substrate, verifies its signature, wires Claude Desktop / Cursor / Zed / Codex / OpenClaw, enables the auto-wire watcher, clones your private memory repo to `$HOME/agent-continuity-memory`, and runs an initial sync so this Mac inherits the curated continuity state immediately. The clone step is idempotent (re-running on a machine that already has the local clone skips clone and just runs `sync`). Pass `--memory-path` to clone somewhere other than the default.
+
+Or the step-by-step equivalent if you prefer to see each step:
 
 ```bash
 git clone https://github.com/YOU/agent-continuity-memory.git "$HOME/agent-continuity-memory"

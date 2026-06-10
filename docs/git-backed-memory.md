@@ -119,7 +119,31 @@ durable before it leaves the machine.
 
 ## Second Machine Setup
 
-On another Mac, PC, or VM:
+### One-shot (v0.4.2+)
+
+On another Mac, PC, or VM, the bootstrap one-liner accepts `--memory-repo` (and an optional `--memory-path`). One command does install + signature verification + wiring + memory clone + initial sync:
+
+```bash
+curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh \
+  | bash -s -- \
+      --connect-all --watch --upgrade \
+      --memory-repo git@github.com:YOU/agent-continuity-memory.git
+```
+
+What happens, in order:
+1. Resolves latest release tag, downloads tarball + sha256 + sig + crt
+2. Verifies sha256 and cosign signature
+3. Runs install.sh into `$XDG_DATA_HOME/agent-continuity/v{X.Y.Z}/`
+4. Runs `connect all --apply` (because `--connect-all`)
+5. Enables the agent-home watcher LaunchAgent (because `--watch`)
+6. Clones `--memory-repo` to `$HOME/agent-continuity-memory` (or `--memory-path` if you set one)
+7. Runs `git-memory sync` to populate the local substrate state from the memory repo
+
+The clone step is idempotent. If the target path already has a `.git/` directory, the clone is skipped and only `sync` runs — so re-running the one-liner on the same machine just refreshes the binary and re-syncs.
+
+Failure-tolerant: a failed clone or sync (auth issue, network, conflict) logs a warning and leaves you with a complete install + wiring. The substrate is fully usable; you can retry the memory step with `agent-continuity git-memory --path "$HOME/agent-continuity-memory" sync`.
+
+### Step-by-step (if you want to see each step before any code runs)
 
 1. Install the continuity layer.
 
@@ -140,10 +164,7 @@ On another Mac, PC, or VM:
    agent-continuity git-memory --path "$HOME/agent-continuity-memory" status
    ```
 
-The second machine now has the durable continuity memory: decisions, context
-snapshots, curated project summaries, handoffs, and artifact indexes. It does
-not receive raw local sessions, credentials, cookies, machine-local trust
-grants, or signing material.
+Either path leaves the second machine with the durable continuity memory: decisions, context snapshots, curated project summaries, handoffs, and artifact indexes. It does not receive raw local sessions, credentials, cookies, machine-local trust grants, or signing material.
 
 ## Asking An Agent To Set It Up
 

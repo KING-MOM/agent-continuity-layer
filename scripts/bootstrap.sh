@@ -46,12 +46,34 @@ CONNECT_ALL=0
 NO_VERIFY=0
 UPGRADE=0
 WATCH=0
-for arg in "$@"; do
-  case "${arg}" in
-    --connect-all) CONNECT_ALL=1 ;;
-    --no-verify) NO_VERIFY=1 ;;
-    --upgrade) UPGRADE=1 ;;
-    --watch) WATCH=1 ;;
+MEMORY_REPO=""
+MEMORY_PATH=""
+
+# Note: switched from `for arg in "$@"` to a `while`+`shift` loop in v0.4.2
+# so that value-taking flags (--memory-repo URL, --memory-path PATH) can
+# consume the next argument. The existing single-arg flags keep the same
+# spelling and semantics. Both `--flag value` and `--flag=value` are accepted
+# for the value-taking flags.
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --connect-all) CONNECT_ALL=1; shift ;;
+    --no-verify) NO_VERIFY=1; shift ;;
+    --upgrade) UPGRADE=1; shift ;;
+    --watch) WATCH=1; shift ;;
+    --memory-repo)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        echo "error: --memory-repo requires a value (e.g. git@github.com:YOU/agent-continuity-memory.git)" >&2
+        exit 1
+      fi
+      MEMORY_REPO="$2"; shift 2 ;;
+    --memory-repo=*) MEMORY_REPO="${1#*=}"; shift ;;
+    --memory-path)
+      if [ "$#" -lt 2 ] || [ -z "$2" ]; then
+        echo "error: --memory-path requires a value (e.g. \$HOME/agent-continuity-memory)" >&2
+        exit 1
+      fi
+      MEMORY_PATH="$2"; shift 2 ;;
+    --memory-path=*) MEMORY_PATH="${1#*=}"; shift ;;
     -h|--help)
       cat <<'EOF'
 bootstrap.sh — one-line install for agent-continuity-layer.
@@ -59,6 +81,13 @@ bootstrap.sh — one-line install for agent-continuity-layer.
 Usage:
   curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash
   curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh | bash -s -- --connect-all
+
+  # One-shot second-machine setup: install + wire agents + clone private
+  # memory repo + initial sync, all from one curl-bash. No more typing the
+  # private repo URL into a second command after install completes.
+  curl -fsSL https://github.com/KING-MOM/agent-continuity-layer/releases/latest/download/bootstrap.sh \
+    | bash -s -- --connect-all --watch --upgrade \
+                 --memory-repo git@github.com:YOU/agent-continuity-memory.git
 
 Flags:
   --connect-all   After install, run `agent-continuity connect all --apply`
@@ -85,13 +114,25 @@ Flags:
                   remains "tool", not "background service", unless you
                   explicitly opt in. Disable any time with
                   `agent-continuity watch disable`.
+  --memory-repo URL
+                  Your private Git-backed continuity memory repo (e.g.
+                  git@github.com:YOU/agent-continuity-memory.git). When set,
+                  bootstrap clones it after install and runs an initial
+                  `git-memory sync` so the new machine inherits the
+                  curated memory immediately. Idempotent: if the local
+                  path already exists with a `.git/` dir, the clone step
+                  is skipped and only the sync runs.
+  --memory-path PATH
+                  Where to clone --memory-repo locally. Defaults to
+                  \$HOME/agent-continuity-memory. Ignored unless
+                  --memory-repo is also set.
   -h, --help      This message.
 EOF
       exit 0
       ;;
     *)
-      echo "warning: ignoring unknown argument: ${arg}" >&2
-      ;;
+      echo "warning: ignoring unknown argument: $1" >&2
+      shift ;;
   esac
 done
 
@@ -257,9 +298,69 @@ fi
 echo
 echo "✓ installed agent-continuity v${VERSION}"
 
+# Shim path is needed by the connect-all / watch / memory post-install
+# blocks. Compute once so they share the same value (and any of them
+# can fire independently — connect-all is not a prerequisite for the
+# others as of v0.4.2).
+BIN_HOME="${XDG_BIN_HOME:-${HOME}/.local/bin}"
+SHIM="${BIN_HOME}/agent-continuity"
+
+# Helper for the optional --memory-repo bootstrap. Idempotent: if the
+# clone path already has a `.git/` dir, skip clone and just run sync.
+# Failure-tolerant: a sync failure (network, auth, conflict) is logged
+# but does NOT fail the bootstrap — install + wiring are already done
+# and the operator can re-run `agent-continuity git-memory sync` later.
+_setup_memory_repo() {
+  local repo="$1"
+  local path="$2"
+  if [ -z "${repo}" ]; then
+    return 0
+  fi
+  if [ -z "${path}" ]; then
+    path="${HOME}/agent-continuity-memory"
+  fi
+  echo
+  echo "==> setting up private continuity memory"
+  echo "    repo: ${repo}"
+  echo "    path: ${path}"
+  if [ ! -x "${SHIM}" ]; then
+    echo "    warn: cannot locate installed CLI at ${SHIM}" >&2
+    echo "          memory setup skipped — install is otherwise complete" >&2
+    return 1
+  fi
+  if [ -d "${path}/.git" ]; then
+    echo "    (clone path already initialized, skipping git clone)"
+  else
+    if ! _need git 2>/dev/null; then
+      echo "    error: bootstrap needs 'git' on PATH to clone --memory-repo" >&2
+      return 1
+    fi
+    mkdir -p "$(dirname "${path}")"
+    if ! git clone "${repo}" "${path}"; then
+      cat >&2 <<EOF
+    error: git clone failed for ${repo}
+          install + wiring are still complete. To retry manually:
+              git clone ${repo} "${path}"
+              ${SHIM} git-memory --path "${path}" sync
+EOF
+      return 1
+    fi
+  fi
+  if "${SHIM}" git-memory --path "${path}" sync; then
+    echo "✓ memory synced"
+    echo "  audit:    ${path}/metadata/last-export.json"
+    echo "  resync:   ${SHIM} git-memory --path \"${path}\" sync"
+  else
+    cat >&2 <<EOF
+warn: \`git-memory sync\` exited non-zero.
+      memory repo is cloned at ${path}; install + wiring are unaffected.
+      retry: ${SHIM} git-memory --path "${path}" sync
+EOF
+    return 1
+  fi
+}
+
 if [ "${CONNECT_ALL}" = "1" ]; then
-  BIN_HOME="${XDG_BIN_HOME:-${HOME}/.local/bin}"
-  SHIM="${BIN_HOME}/agent-continuity"
   echo
   echo "==> wiring local agents (Claude Desktop / Cursor / Zed / thin skills)"
   if [ ! -x "${SHIM}" ]; then
@@ -327,7 +428,22 @@ EOF
     fi
   fi
 
+  # v0.4.2: --memory-repo one-shot bootstrap. Clone the operator's
+  # private continuity-memory repo and run an initial sync so the new
+  # machine inherits curated memory immediately. Idempotent + failure-
+  # tolerant (see _setup_memory_repo above).
+  if [ -n "${MEMORY_REPO}" ]; then
+    _setup_memory_repo "${MEMORY_REPO}" "${MEMORY_PATH}" || true
+  fi
+
   exit 0
+fi
+
+# Non-connect-all path. The operator chose not to wire third-party
+# apps, but they may still have asked for --memory-repo bootstrap.
+# Run that here before printing next-steps.
+if [ -n "${MEMORY_REPO}" ]; then
+  _setup_memory_repo "${MEMORY_REPO}" "${MEMORY_PATH}" || true
 fi
 
 echo
