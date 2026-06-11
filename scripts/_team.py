@@ -292,6 +292,68 @@ def cmd_add_actor(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_current(args: argparse.Namespace) -> int:
+    """Show the active team routing as the substrate would resolve it RIGHT
+    NOW for a fresh decision append. Mirrors resolve_team_id()'s priority chain
+    so the operator can answer 'am I about to write personal or team?' without
+    guessing."""
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from _decisions import resolve_team_id, PERSONAL_TEAM_ID  # noqa
+
+    # Walk the priority chain the same way resolve_team_id() does.
+    source = "default (personal)"
+    team_id = PERSONAL_TEAM_ID
+    team_repo: str | None = None
+    team_name: str | None = None
+
+    env_id = os.environ.get("AGENT_CONTINUITY_TEAM_ID")
+    env_repo = os.environ.get("AGENT_CONTINUITY_TEAM_REPO")
+    if env_id:
+        team_id = env_id
+        source = "env: AGENT_CONTINUITY_TEAM_ID"
+    elif env_repo:
+        # Resolve from manifest at that path
+        team_repo = env_repo
+        candidate = pathlib.Path(env_repo).expanduser() / MANIFEST_FILENAME
+        if candidate.exists():
+            try:
+                m = json.loads(candidate.read_text(encoding="utf-8"))
+                team_id = m.get("team_id") or PERSONAL_TEAM_ID
+                team_name = m.get("team_name") or None
+                source = f"env: AGENT_CONTINUITY_TEAM_REPO={env_repo}"
+            except (OSError, json.JSONDecodeError):
+                source = f"env: AGENT_CONTINUITY_TEAM_REPO={env_repo} (manifest unreadable)"
+        else:
+            source = f"env: AGENT_CONTINUITY_TEAM_REPO={env_repo} (no manifest at path)"
+
+    info: dict[str, Any] = {
+        "team_id": team_id,
+        "source": source,
+        "team_repo": team_repo,
+        "team_name": team_name,
+        "is_personal": team_id == PERSONAL_TEAM_ID,
+    }
+
+    if args.json:
+        print(json.dumps(info, indent=2, sort_keys=True))
+        return 0
+
+    print(f"routing: team_id={team_id}" + (f"  ({team_name})" if team_name else ""))
+    print(f"source:  {source}")
+    if team_repo:
+        print(f"target:  {team_repo}")
+    if info["is_personal"]:
+        print()
+        print("decisions written from this shell will route to PERSONAL memory only.")
+    else:
+        print()
+        print("decisions written from this shell will route to the named TEAM memory.")
+    print()
+    print("override per-call with: --team-id <id> | --team-repo <path>")
+    print("override per-shell with: export AGENT_CONTINUITY_TEAM_REPO=<path>")
+    return 0
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     repo = _resolve_path(args)
     mp = _manifest_path(repo)
@@ -346,6 +408,10 @@ def main() -> int:
 
     p_ver = sub.add_parser("verify", help="verify manifest signature against current admin set")
     p_ver.set_defaults(func=cmd_verify)
+
+    p_cur = sub.add_parser("current", help="show active team routing for new decisions in this shell")
+    p_cur.add_argument("--json", action="store_true", help="emit JSON")
+    p_cur.set_defaults(func=cmd_current)
 
     args = parser.parse_args()
     return args.func(args)

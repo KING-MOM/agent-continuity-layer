@@ -105,6 +105,14 @@
           "refs": {
             "type": "array",
             "items": { "type": "string" }
+          },
+          "team_id": {
+            "type": "string",
+            "description": "v0.5.2+: routing scope for this decision. 'personal' (default) keeps it out of any team memory repo; a team UUID matches a team-manifest.json's team_id and routes the decision to that team's memory on sync. Lets MCP clients (Claude Desktop, Cursor, Zed) target a team per-call without depending on which env was active when the app was launched."
+          },
+          "team_repo": {
+            "type": "string",
+            "description": "v0.5.2+: alternative to team_id — path to a team memory repo. The team_id is read from team-manifest.json at that path. Useful when the caller knows the repo path but not the UUID."
           }
         },
         "additionalProperties": false

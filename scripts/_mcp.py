@@ -158,6 +158,13 @@ def handle_append_decision(args: dict[str, Any]) -> dict[str, Any]:
         cmd += ["--repo", str(args["repo"])]
     for r in args.get("refs") or []:
         cmd += ["--ref", str(r)]
+    # v0.5.2+: per-call team routing for MCP clients. Lets Claude Desktop
+    # / Cursor / Zed write to a specific team scope without depending on
+    # the env var that was active when the host app launched.
+    if args.get("team_id"):
+        cmd += ["--team-id", str(args["team_id"])]
+    if args.get("team_repo"):
+        cmd += ["--team-repo", str(args["team_repo"])]
     rc, out, err = _run(cmd)
     if rc != 0:
         raise MCPToolError(f"decisions.sh add failed (rc={rc}): {err.strip()}")
