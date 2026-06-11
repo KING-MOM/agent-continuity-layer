@@ -42,7 +42,44 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = REPO_ROOT / "core" / "schemas" / "decision-entry.schema.json"
 
 ADAPTERS: tuple[str, ...] = ("claude", "codex", "openclaw", "human", "chatgpt", "gemini", "grok", "kimi")
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"  # v0.5.0+: includes optional crypto attribution fields
+SCHEMA_VERSION_LEGACY = "1.0"  # still accepted on read for back-compat with pre-v0.5.0 logs
+ACCEPTED_SCHEMA_VERSIONS = (SCHEMA_VERSION, SCHEMA_VERSION_LEGACY)
+
+# v0.5.0+ optional crypto fields. Present on entries signed by a device
+# key; absent on legacy v1.0 entries and on unsigned writes (those emit
+# a warning at write time but don't fail).
+CRYPTO_FIELDS = (
+    "human_actor_id",
+    "device_key_id",
+    "device_signature",
+    "signer_consent",
+    "migrated_from_v0",
+)
+
+# Local crypto helpers — lazily imported so substrate code that doesn't
+# touch signing (legacy callers, scripts that only read) doesn't pull
+# the cryptography library into memory.
+_crypto = None
+_key = None
+
+
+def _load_crypto() -> tuple[Any, Any]:
+    """Lazy import. Returns (crypto_module, key_module) or (None, None)
+    if the cryptography library isn't available (extremely unusual but
+    we degrade gracefully — unsigned writes still work)."""
+    global _crypto, _key
+    if _crypto is None:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            import _crypto as crypto_mod  # noqa
+            import _key as key_mod  # noqa
+            _crypto = crypto_mod
+            _key = key_mod
+        except ImportError:
+            _crypto = False
+            _key = False
+    return (_crypto or None), (_key or None)
 
 # XDG_STATE_HOME per the XDG Base Directory Spec: durable user state,
 # distinct from cache (transient) and config (machine-edited). Honor the
@@ -103,12 +140,99 @@ def _release_lock() -> None:
 # ---------- id + validation ----------
 
 def _compute_id(entry: dict[str, Any]) -> str:
-    """sha256 hex of the canonical body (entry with id removed, sorted-keys
-    JSON, no whitespace separators). Deterministic; two identical decisions
-    get the same id (intentional dedup behavior)."""
-    body = {k: v for k, v in entry.items() if k != "id"}
+    """sha256 hex of the canonical body (entry with id AND device_signature
+    removed, sorted-keys JSON, no whitespace separators).
+
+    Excluding device_signature keeps the id stable whether or not the entry
+    is signed, so an unsigned entry's id matches its signed-later id (the
+    signature is a separate integrity check, not part of content identity).
+    Excluding id is the existing self-reference guard.
+
+    Deterministic; two identical decisions get the same id (intentional
+    dedup behavior).
+    """
+    body = {k: v for k, v in entry.items() if k not in ("id", "device_signature")}
     canonical = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+# ---------- crypto attribution (v0.5.0+) ----------
+
+def _attribution_fields() -> dict[str, Any] | None:
+    """If a device key is configured, return the {human_actor_id, device_key_id}
+    fields to inject into a new decision entry. Returns None if no key — caller
+    decides whether to warn or proceed unsigned."""
+    crypto, key_mod = _load_crypto()
+    if not key_mod:
+        return None
+    try:
+        key = key_mod.load_device_key()
+    except (ValueError, OSError):
+        return None
+    if not key:
+        return None
+    return {
+        "human_actor_id": key["human_actor_id"],
+        "device_key_id": key["device_key_id"],
+    }
+
+
+def _sign_entry_inplace(entry: dict[str, Any], consent: str = "implicit") -> bool:
+    """If a device key is configured, populate the entry with attribution
+    fields + a signature. Returns True if the entry was signed, False if no
+    key was available. Mutates `entry` in place."""
+    attr = _attribution_fields()
+    if attr is None:
+        return False
+    crypto, key_mod = _load_crypto()
+    key = key_mod.load_device_key()
+    priv = crypto.private_key_from_pem(key["private_key_pem"])
+
+    entry.update(attr)
+    entry["signer_consent"] = consent
+    # Sign over the canonical body (excludes id and device_signature).
+    # Order matters: id is computed AFTER signing because device_signature
+    # is excluded from id formula too, so signing first then id-computing
+    # gives a stable id regardless of when signing happened.
+    entry["device_signature"] = crypto.sign_decision_entry(entry, priv)
+    return True
+
+
+def _verify_entry_against_local_key(entry: dict[str, Any]) -> tuple[bool, str]:
+    """Verify an entry's device_signature against the local device key.
+
+    Returns (verified: bool, reason: str). reason is a short status string:
+      - 'verified'             — signature checks out against the local key
+      - 'no-signature'         — entry has no device_signature field
+      - 'no-local-key'         — local device key isn't configured
+      - 'different-device'     — entry was signed by a different device key
+                                 (which is normal in team contexts; verification
+                                 requires the team manifest, not just local key)
+      - 'signature-invalid'    — signature failed cryptographic verification
+      - 'crypto-unavailable'   — cryptography library not importable
+
+    For Phase 1a (v0.5.0), team-manifest-based verification is not yet wired —
+    only local-key verification is. Entries signed by other devices are
+    reported as 'different-device' and treated as "trust the source git
+    transport for now."
+    """
+    if not entry.get("device_signature"):
+        return False, "no-signature"
+    crypto, key_mod = _load_crypto()
+    if not crypto:
+        return False, "crypto-unavailable"
+    try:
+        key = key_mod.load_device_key()
+    except (ValueError, OSError):
+        return False, "no-local-key"
+    if not key:
+        return False, "no-local-key"
+    if entry.get("device_key_id") != key.get("device_key_id"):
+        return False, "different-device"
+    pub = crypto.public_key_from_pem(key["public_key_pem"])
+    if crypto.verify_decision_entry(entry, pub):
+        return True, "verified"
+    return False, "signature-invalid"
 
 
 def _validate_entry(entry: dict[str, Any]) -> list[str]:
@@ -124,7 +248,10 @@ def _validate_entry(entry: dict[str, Any]) -> list[str]:
         return [f"entry is not an object: {type(entry).__name__}"]
 
     required = ("schema_version", "id", "ts", "adapter", "repo", "decision", "why", "refs")
-    allowed = required + ("author",)
+    # v0.5.0+ extends `allowed` with optional crypto fields. Legacy v1.0
+    # entries don't carry them; that's fine — they're optional. New entries
+    # written when a device key exists carry them all.
+    allowed = required + ("author",) + CRYPTO_FIELDS
     for k in required:
         if k not in entry:
             errors.append(f"missing required field {k!r}")
@@ -132,9 +259,10 @@ def _validate_entry(entry: dict[str, Any]) -> list[str]:
         if k not in allowed:
             errors.append(f"unknown field {k!r}")
 
-    if entry.get("schema_version") != SCHEMA_VERSION:
+    sv = entry.get("schema_version")
+    if sv not in ACCEPTED_SCHEMA_VERSIONS:
         errors.append(
-            f"schema_version must be {SCHEMA_VERSION!r}, got {entry.get('schema_version')!r}"
+            f"schema_version must be one of {ACCEPTED_SCHEMA_VERSIONS!r}, got {sv!r}"
         )
     if "id" in entry and not isinstance(entry["id"], str):
         errors.append("id must be a string")
@@ -296,6 +424,9 @@ def _append_entries_internal(
         }
         if "author" in partial:
             entry["author"] = partial["author"]
+        # v0.5.0+: sign batched entries the same way single adds are signed.
+        # Worker / bundle batches inherit the operator's device key.
+        _sign_entry_inplace(entry, consent="implicit")
         entry["id"] = _compute_id(entry)
 
         full_errs = _validate_entry(entry)
@@ -478,6 +609,18 @@ def cmd_add(args: argparse.Namespace) -> int:
     }
     if args.author:
         entry["author"] = args.author
+
+    # v0.5.0+: sign with the local device key if one is configured. Adds
+    # human_actor_id, device_key_id, signer_consent, device_signature fields.
+    # If no key, fall through unsigned with a one-line stderr warning so the
+    # operator knows their decision isn't cryptographically attributed.
+    signed = _sign_entry_inplace(entry, consent="implicit")
+    if not signed:
+        print(
+            "warn: appended unsigned decision (no device key configured).\n"
+            "      generate one with: agent-continuity key generate",
+            file=sys.stderr,
+        )
 
     entry["id"] = _compute_id(entry)
 

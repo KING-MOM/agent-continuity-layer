@@ -49,6 +49,8 @@ SUBCOMMANDS=(
   "sync:multi-device sync"
   "migrate:schema migration runner"
   "watch:opt-in agent-home watcher (auto-wire new agents as they appear)"
+  "key:local Ed25519 device keypair for cryptographic attribution"
+  "team:team-manifest management (bind humans to device keys)"
 )
 
 usage() {
