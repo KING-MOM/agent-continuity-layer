@@ -55,7 +55,13 @@ CRYPTO_FIELDS = (
     "device_signature",
     "signer_consent",
     "migrated_from_v0",
+    # v0.5.1+: team_id is the routing field. "personal" means the entry
+    # belongs only to the operator's personal memory; a UUID matches the
+    # team_id of a team-manifest in a target memory repo.
+    "team_id",
 )
+
+PERSONAL_TEAM_ID = "personal"
 
 # Local crypto helpers — lazily imported so substrate code that doesn't
 # touch signing (legacy callers, scripts that only read) doesn't pull
@@ -196,6 +202,73 @@ def _sign_entry_inplace(entry: dict[str, Any], consent: str = "implicit") -> boo
     # gives a stable id regardless of when signing happened.
     entry["device_signature"] = crypto.sign_decision_entry(entry, priv)
     return True
+
+
+def resolve_team_id(
+    *,
+    explicit_team_id: str | None = None,
+    team_repo_path: str | None = None,
+    use_env: bool = True,
+) -> str:
+    """Resolve the team_id to attach to a new decision entry.
+
+    Priority (highest first):
+      1. explicit_team_id (CLI --team-id flag) — used verbatim
+      2. team_repo_path (CLI --team-repo flag) — read team_id from the
+         team-manifest.json at that path
+      3. AGENT_CONTINUITY_TEAM_ID env var (if use_env, default True)
+      4. AGENT_CONTINUITY_TEAM_REPO env var (if use_env, read from manifest)
+      5. PERSONAL_TEAM_ID ("personal") as the safe default
+
+    The default-to-personal rule is the load-bearing guarantee: an
+    operator who hasn't said anything about teams gets personal memory.
+    No accidental leaks to team repos via routing-by-omission.
+    """
+    if explicit_team_id:
+        return explicit_team_id
+    if team_repo_path:
+        return _team_id_from_manifest(team_repo_path)
+    if use_env:
+        env_id = os.environ.get("AGENT_CONTINUITY_TEAM_ID")
+        if env_id:
+            return env_id
+        env_repo = os.environ.get("AGENT_CONTINUITY_TEAM_REPO")
+        if env_repo:
+            return _team_id_from_manifest(env_repo)
+    return PERSONAL_TEAM_ID
+
+
+def _team_id_from_manifest(repo_path: str) -> str:
+    """Read team_id from <repo_path>/team-manifest.json. Falls back to
+    PERSONAL_TEAM_ID with a stderr warning if no manifest is found —
+    the operator told us to route to a team but the target isn't actually
+    a team repo, so we degrade to personal rather than dropping the entry."""
+    p = Path(repo_path).expanduser() / "team-manifest.json"
+    if not p.exists():
+        print(
+            f"warn: --team-repo {repo_path} has no team-manifest.json; "
+            f"defaulting to team_id=personal",
+            file=sys.stderr,
+        )
+        return PERSONAL_TEAM_ID
+    try:
+        manifest = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"warn: failed to read {p}: {e}; defaulting to team_id=personal",
+              file=sys.stderr)
+        return PERSONAL_TEAM_ID
+    tid = manifest.get("team_id")
+    if not tid:
+        print(f"warn: {p} has no team_id; defaulting to personal", file=sys.stderr)
+        return PERSONAL_TEAM_ID
+    return tid
+
+
+def entry_team_id(entry: dict[str, Any]) -> str:
+    """Return the routing team_id of a decision entry. Legacy entries
+    without the field are treated as PERSONAL_TEAM_ID — they belong to
+    the operator who created them, not to any team."""
+    return entry.get("team_id") or PERSONAL_TEAM_ID
 
 
 def _verify_entry_against_local_key(entry: dict[str, Any]) -> tuple[bool, str]:
@@ -424,6 +497,12 @@ def _append_entries_internal(
         }
         if "author" in partial:
             entry["author"] = partial["author"]
+        # v0.5.1+: batched writes (worker/bundle) honor the operator's
+        # configured team via env; explicit per-partial team_id wins if set.
+        entry["team_id"] = (
+            partial.get("team_id")
+            or resolve_team_id()
+        )
         # v0.5.0+: sign batched entries the same way single adds are signed.
         # Worker / bundle batches inherit the operator's device key.
         _sign_entry_inplace(entry, consent="implicit")
@@ -609,6 +688,13 @@ def cmd_add(args: argparse.Namespace) -> int:
     }
     if args.author:
         entry["author"] = args.author
+
+    # v0.5.1+: team_id routing. Resolve before signing so the signature
+    # covers the team attribution too.
+    entry["team_id"] = resolve_team_id(
+        explicit_team_id=getattr(args, "team_id", None),
+        team_repo_path=getattr(args, "team_repo", None),
+    )
 
     # v0.5.0+: sign with the local device key if one is configured. Adds
     # human_actor_id, device_key_id, signer_consent, device_signature fields.
@@ -882,6 +968,16 @@ def main(argv: list[str] | None = None) -> int:
     add_p.add_argument("--ref", action="append", default=[],
                        help="add a free-form ref (repeatable); e.g. task:task-12, "
                             "commit:abc1234, doc:CHARTER.md, M7.2")
+    add_p.add_argument("--team-id",
+                       help="explicit team_id for routing. Default: 'personal' "
+                            "(the entry syncs only to non-team memory repos). "
+                            "Pass a team UUID to route the entry to a team's "
+                            "memory repo. Also honors $AGENT_CONTINUITY_TEAM_ID.")
+    add_p.add_argument("--team-repo",
+                       help="path to a team memory repo. The team_id is read "
+                            "from team-manifest.json at that path. Mutually "
+                            "exclusive with --team-id (takes precedence over env). "
+                            "Also honors $AGENT_CONTINUITY_TEAM_REPO.")
 
     list_p = sub.add_parser("list", help="list decision entries (newest first)")
     list_p.add_argument("--repo", help="filter by repo")

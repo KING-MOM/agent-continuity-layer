@@ -283,15 +283,81 @@ def _export_device(root: Path) -> bool:
     return True
 
 
+def _target_team_id(root: Path) -> str:
+    """Resolve the target team_id for this sync.
+
+    v0.5.1+: if <root>/team-manifest.json exists, the sync routes to that
+    team. If not, the sync routes to 'personal' — the operator's individual
+    memory. Every sync target is one specific team scope; entries with
+    other team_ids are not copied. No accidental cross-pollination."""
+    mp = root / "team-manifest.json"
+    if not mp.exists():
+        return "personal"
+    try:
+        manifest = json.loads(mp.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "personal"
+    return manifest.get("team_id") or "personal"
+
+
+def _copy_decisions_filtered(src: Path, dst: Path, target_team_id: str) -> bool:
+    """Copy decisions.jsonl filtering by team_id. Only entries matching
+    target_team_id (or legacy entries without team_id when target is
+    'personal') are written to dst.
+
+    Returns True if dst was written (at least one entry matched), False
+    if src didn't exist or no entries matched (dst is not created in
+    that case so we don't leave confusing empty files behind).
+    """
+    if not src.exists():
+        return False
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    tmp_dst = dst.with_suffix(dst.suffix + ".tmp")
+    with src.open(encoding="utf-8") as f_in, tmp_dst.open("w", encoding="utf-8") as f_out:
+        for line in f_in:
+            line_s = line.strip()
+            if not line_s:
+                continue
+            try:
+                entry = json.loads(line_s)
+            except json.JSONDecodeError:
+                # Preserve malformed lines verbatim — don't drop them silently.
+                # Operators can investigate; sync shouldn't be a quiet shredder.
+                f_out.write(line if line.endswith("\n") else line + "\n")
+                continue
+            # Legacy entries (pre-v0.5.1) have no team_id; treat them as 'personal'.
+            entry_team = entry.get("team_id") or "personal"
+            if entry_team != target_team_id:
+                continue
+            f_out.write(line if line.endswith("\n") else line + "\n")
+            written += 1
+    if written == 0:
+        try:
+            tmp_dst.unlink()
+        except OSError:
+            pass
+        return False
+    tmp_dst.replace(dst)
+    return True
+
+
 def _export_curated(root: Path, *, write_manifest: bool) -> dict[str, Any]:
     _ensure_layout(root)
+    target_team_id = _target_team_id(root)
 
     exported: dict[str, Any] = {
-        "decisions": _copy_if_exists(STATE_ROOT / "decisions.jsonl", root / "decisions" / "decisions.jsonl"),
-        "decisions_compacted": _copy_if_exists(
+        "decisions": _copy_decisions_filtered(
+            STATE_ROOT / "decisions.jsonl",
+            root / "decisions" / "decisions.jsonl",
+            target_team_id,
+        ),
+        "decisions_compacted": _copy_decisions_filtered(
             STATE_ROOT / "decisions.compacted.jsonl",
             root / "decisions" / "decisions.compacted.jsonl",
+            target_team_id,
         ),
+        "routed_to_team_id": target_team_id,
         "context_snapshot_json": _copy_if_exists(
             REPO_ROOT / "core" / "context-snapshot.json",
             root / "contexts" / "agent-continuity-layer.context.json",
