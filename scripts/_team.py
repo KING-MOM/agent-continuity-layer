@@ -292,6 +292,206 @@ def cmd_add_actor(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_audit(args: argparse.Namespace) -> int:
+    """Defense-in-depth check: verify every entry in a memory repo
+    actually belongs to that repo's team_id (or is 'personal' for non-
+    team repos). Loud failure on mismatch; this is the safety net for
+    routing bugs and operator errors.
+
+    Auditable files (v0.5.3):
+      decisions/decisions.jsonl           — each line's team_id must match
+      decisions/decisions.compacted.jsonl — same
+      projects/*.json                     — team_id field (default personal)
+      contexts/*                          — must be EMPTY in team repos
+                                            (contexts are substrate-local)
+
+    Returns:
+      0  all entries match
+      1  one or more mismatches (operator should investigate before push)
+      2  invocation error (no manifest, unreadable files, etc.)
+    """
+    repo = _resolve_path(args)
+    mp = _manifest_path(repo)
+    if mp.exists():
+        try:
+            manifest = json.loads(mp.read_text(encoding="utf-8"))
+            target_team_id = manifest.get("team_id") or "personal"
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"error: cannot read manifest at {mp}: {e}", file=sys.stderr)
+            return 2
+    else:
+        target_team_id = "personal"
+
+    findings: list[dict[str, Any]] = []
+    decisions_path = repo / "decisions" / "decisions.jsonl"
+    if decisions_path.exists():
+        for lineno, raw in enumerate(decisions_path.read_text(encoding="utf-8").splitlines(), 1):
+            if not raw.strip():
+                continue
+            try:
+                entry = json.loads(raw)
+            except json.JSONDecodeError as e:
+                findings.append({
+                    "file": str(decisions_path.relative_to(repo)),
+                    "line": lineno,
+                    "kind": "malformed-json",
+                    "detail": str(e),
+                })
+                continue
+            entry_team = entry.get("team_id") or "personal"
+            if entry_team != target_team_id:
+                findings.append({
+                    "file": str(decisions_path.relative_to(repo)),
+                    "line": lineno,
+                    "kind": "team-mismatch",
+                    "entry_id": entry.get("id", "?"),
+                    "decision": entry.get("decision", "?")[:80],
+                    "expected_team_id": target_team_id,
+                    "actual_team_id": entry_team,
+                })
+
+    projects_dir = repo / "projects"
+    if projects_dir.is_dir():
+        for src in sorted(projects_dir.glob("*.json")):
+            try:
+                proj = json.loads(src.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as e:
+                findings.append({
+                    "file": str(src.relative_to(repo)),
+                    "line": 0,
+                    "kind": "malformed-json",
+                    "detail": str(e),
+                })
+                continue
+            proj_team = proj.get("team_id") or "personal"
+            if proj_team != target_team_id:
+                findings.append({
+                    "file": str(src.relative_to(repo)),
+                    "line": 0,
+                    "kind": "team-mismatch",
+                    "expected_team_id": target_team_id,
+                    "actual_team_id": proj_team,
+                })
+
+    # Contexts in team repos = leak (substrate-local files shouldn't be here)
+    if target_team_id != "personal":
+        contexts_dir = repo / "contexts"
+        if contexts_dir.is_dir():
+            for src in sorted(contexts_dir.iterdir()):
+                if not src.is_file():
+                    continue
+                # .gitkeep is git plumbing planted by `git-memory init` to
+                # keep the directory tracked; it's not substrate content.
+                if src.name == ".gitkeep":
+                    continue
+                findings.append({
+                    "file": str(src.relative_to(repo)),
+                    "line": 0,
+                    "kind": "context-in-team-repo",
+                    "detail": "contexts are substrate-local and should not appear in team repos",
+                })
+
+    if args.json:
+        print(json.dumps({
+            "repo": str(repo),
+            "target_team_id": target_team_id,
+            "findings_count": len(findings),
+            "findings": findings,
+        }, indent=2))
+    else:
+        print(f"team audit: {repo}")
+        print(f"  expected team_id: {target_team_id}")
+        if not findings:
+            print(f"  ✓ no leaks detected ({_count_audited_entries(repo)} entries audited)")
+        else:
+            print(f"  ✗ {len(findings)} finding(s):")
+            for f in findings:
+                kind = f["kind"]
+                file_ = f["file"]
+                line_ = f.get("line", 0)
+                if kind == "team-mismatch":
+                    detail = (f"expected team_id={f['expected_team_id']}, "
+                              f"got {f['actual_team_id']}")
+                    if "decision" in f:
+                        detail += f"  decision={f['decision']!r}"
+                else:
+                    detail = f.get("detail", "")
+                pos = f"{file_}:{line_}" if line_ else file_
+                print(f"    [{kind}] {pos}  {detail}")
+            print()
+            print("  these entries should NOT be in this repo. Likely causes:")
+            print("    - routing misconfig (wrong --team-id / --team-repo / env)")
+            print("    - a bug in git-memory sync filtering")
+            print("    - manual editing of files in this repo")
+            print("  do NOT push until investigated.")
+    return 0 if not findings else 1
+
+
+def _count_audited_entries(repo: pathlib.Path) -> int:
+    n = 0
+    decisions = repo / "decisions" / "decisions.jsonl"
+    if decisions.exists():
+        n += sum(1 for line in decisions.read_text(encoding="utf-8").splitlines() if line.strip())
+    projects = repo / "projects"
+    if projects.is_dir():
+        n += sum(1 for _ in projects.glob("*.json"))
+    return n
+
+
+def cmd_install_hook(args: argparse.Namespace) -> int:
+    """Install a git pre-commit hook in the team memory repo that runs
+    `team audit` and refuses the commit if any leak is detected. Provides
+    git-level defense-in-depth on top of substrate-level routing."""
+    repo = _resolve_path(args)
+    hook_dir = repo / ".git" / "hooks"
+    if not hook_dir.is_dir():
+        print(f"error: {hook_dir} not found. Is {repo} a git repo?", file=sys.stderr)
+        return 1
+    hook_path = hook_dir / "pre-commit"
+    if hook_path.exists() and not args.force:
+        print(
+            f"error: pre-commit hook already exists at {hook_path}.\n"
+            f"       use --force to overwrite (your existing hook will be lost)",
+            file=sys.stderr,
+        )
+        return 1
+    hook_body = '''#!/usr/bin/env bash
+# agent-continuity team-audit pre-commit hook (v0.5.3+)
+#
+# Runs `agent-continuity team audit` against this memory repo and
+# refuses the commit if any leak is detected. Defense in depth: even
+# if a substrate-level sync bug let through a wrong-team entry, the
+# commit fails before history is poisoned.
+#
+# Disable temporarily: `git commit --no-verify`
+# Remove permanently:  `rm .git/hooks/pre-commit`
+
+set -e
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+if ! command -v agent-continuity >/dev/null 2>&1; then
+  echo "warn: agent-continuity not on PATH; skipping team-audit hook" >&2
+  exit 0
+fi
+
+if ! agent-continuity team --path "${REPO_ROOT}" audit; then
+  echo >&2
+  echo "team audit failed — refusing to commit cross-team data." >&2
+  echo "investigate the findings above, then re-stage." >&2
+  echo "(emergency bypass: git commit --no-verify)" >&2
+  exit 1
+fi
+'''
+    hook_path.write_text(hook_body, encoding="utf-8")
+    os.chmod(hook_path, 0o755)
+    print(f"installed pre-commit hook: {hook_path}")
+    print()
+    print("the hook runs `team audit` on every commit and refuses cross-team data.")
+    print("temporarily bypass with: git commit --no-verify")
+    print(f"remove the hook with: rm {hook_path}")
+    return 0
+
+
 def cmd_current(args: argparse.Namespace) -> int:
     """Show the active team routing as the substrate would resolve it RIGHT
     NOW for a fresh decision append. Mirrors resolve_team_id()'s priority chain
@@ -412,6 +612,14 @@ def main() -> int:
     p_cur = sub.add_parser("current", help="show active team routing for new decisions in this shell")
     p_cur.add_argument("--json", action="store_true", help="emit JSON")
     p_cur.set_defaults(func=cmd_current)
+
+    p_aud = sub.add_parser("audit", help="verify every entry in a memory repo matches its team_id (defense in depth)")
+    p_aud.add_argument("--json", action="store_true", help="emit JSON findings")
+    p_aud.set_defaults(func=cmd_audit)
+
+    p_hook = sub.add_parser("install-hook", help="install a git pre-commit hook that runs `audit` on every commit")
+    p_hook.add_argument("--force", action="store_true", help="overwrite an existing pre-commit hook")
+    p_hook.set_defaults(func=cmd_install_hook)
 
     args = parser.parse_args()
     return args.func(args)

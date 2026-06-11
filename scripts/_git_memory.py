@@ -254,7 +254,10 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
-def _export_projects(root: Path) -> int:
+def _export_projects(root: Path, target_team_id: str) -> int:
+    """v0.5.3+: filter project entries by team_id. Projects without an
+    explicit team_id default to 'personal' (legacy projects belong to
+    the operator who registered them, not to any team)."""
     count = 0
     for base in (CONFIG_ROOT / "projects", STATE_ROOT / "registry"):
         if not base.is_dir():
@@ -262,6 +265,9 @@ def _export_projects(root: Path) -> int:
         for src in sorted(base.glob("*.json")):
             data = _load_json(src)
             if not data:
+                continue
+            entry_team = data.get("team_id") or "personal"
+            if entry_team != target_team_id:
                 continue
             uuid = data.get("uuid") or src.stem
             dst = root / "projects" / f"{uuid}.json"
@@ -271,16 +277,56 @@ def _export_projects(root: Path) -> int:
     return count
 
 
-def _export_device(root: Path) -> bool:
+def _export_device(root: Path, target_team_id: str) -> bool:
+    """v0.5.3+: device-identity is only exported to:
+      - 'personal' targets (the operator's own memory repo)
+      - team targets where the local device's key is bound to a
+        human_actor_id in the team-manifest's admin_set
+    This stops the operator's hostname / device label from leaking into
+    team repos where they're not an admin."""
     src = CONFIG_ROOT / "device-identity.json"
     data = _load_json(src)
     if not data:
         return False
+    # Personal always allowed
+    if target_team_id == "personal":
+        return _write_device_identity(root, data)
+    # Team target: check if local device key is in the team's admin set
+    if not _local_device_is_team_admin(root):
+        return False
+    return _write_device_identity(root, data)
+
+
+def _write_device_identity(root: Path, data: dict[str, Any]) -> bool:
     device_id = data.get("device_id") or "device"
     dst = root / "devices" / f"{device_id}.json"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return True
+
+
+def _local_device_is_team_admin(team_repo: Path) -> bool:
+    """Read the team's manifest at team_repo/team-manifest.json and check
+    whether the local device key's human_actor_id appears in admin_set."""
+    mp = team_repo / "team-manifest.json"
+    if not mp.exists():
+        return False
+    try:
+        manifest = json.loads(mp.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    admins = manifest.get("admin_set", [])
+    if not admins:
+        return False
+    # Try to load the local device key
+    key_path = CONFIG_ROOT / "device-key.json"
+    if not key_path.exists():
+        return False
+    try:
+        key = json.loads(key_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return key.get("human_actor_id") in admins
 
 
 def _target_team_id(root: Path) -> str:
@@ -358,21 +404,32 @@ def _export_curated(root: Path, *, write_manifest: bool) -> dict[str, Any]:
             target_team_id,
         ),
         "routed_to_team_id": target_team_id,
-        "context_snapshot_json": _copy_if_exists(
+        "project_entries": _export_projects(root, target_team_id),
+        "device_identity": _export_device(root, target_team_id),
+    }
+
+    # v0.5.3+: context snapshots are substrate-local (they describe the
+    # operator's currently-running agent-continuity-layer checkout).
+    # They DO NOT cross to team repos because that would leak the
+    # operator's substrate state into team memory. Only personal sync
+    # targets receive them.
+    if target_team_id == "personal":
+        exported["context_snapshot_json"] = _copy_if_exists(
             REPO_ROOT / "core" / "context-snapshot.json",
             root / "contexts" / "agent-continuity-layer.context.json",
-        ),
-        "context_snapshot_md": _copy_if_exists(
+        )
+        exported["context_snapshot_md"] = _copy_if_exists(
             REPO_ROOT / "core" / "context-snapshot.md",
             root / "contexts" / "agent-continuity-layer.context.md",
-        ),
-        "context_pinned": _copy_if_exists(
+        )
+        exported["context_pinned"] = _copy_if_exists(
             REPO_ROOT / "core" / "context-pinned.json",
             root / "contexts" / "agent-continuity-layer.pinned.json",
-        ),
-        "project_entries": _export_projects(root),
-        "device_identity": _export_device(root),
-    }
+        )
+    else:
+        exported["context_snapshot_json"] = False
+        exported["context_snapshot_md"] = False
+        exported["context_pinned"] = False
 
     manifest = {
         "schema_version": "1.0",
