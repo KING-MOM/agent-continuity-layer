@@ -395,6 +395,265 @@ def cmd_compile(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_auto_compile(args: argparse.Namespace) -> int:
+    """v0.5.4: one-pass auto-compile of all quiesced sessions.
+
+    Lists every Claude Code session, filters to those whose last activity
+    is older than --min-age-hours (default 1), checks whether the session
+    has already been compiled (looking for `auto:transcript-compile@<prefix>`
+    entries in the decisions log), and runs `compile --apply` on each
+    remaining session.
+
+    This is the substrate's answer to "I worked for 8 hours and forgot to
+    run transcript compile." Designed to be invoked manually OR by a
+    LaunchAgent on a regular schedule (every 1 hour matches the
+    default quiescence threshold).
+
+    Idempotent: re-running is a no-op for already-compiled sessions
+    (the underlying compile pass is also idempotent — content-addressed
+    decision ids dedupe automatically).
+
+    Failure-tolerant: a failed compile on one session logs the failure
+    and continues to the next. Auto-compile must never block other
+    sessions from being captured because one was problematic.
+    """
+    from _transcript_compile import compile_session
+
+    min_age_seconds = int(args.min_age_hours * 3600)
+    now = dt.datetime.now(dt.timezone.utc)
+
+    # Build set of already-compiled session prefixes for fast lookup
+    already_compiled = _already_compiled_session_prefixes()
+
+    all_sessions = _find_all_sessions()
+    summary = {
+        "scanned": len(all_sessions),
+        "skipped_too_recent": 0,
+        "skipped_already_compiled": 0,
+        "compiled": 0,
+        "failed": 0,
+        "compiled_session_ids": [],
+        "failures": [],
+    }
+
+    for path in all_sessions:
+        session = _scan_session(path)
+        if session is None:
+            continue
+        session_id = session["session_id"]
+        session_prefix = session_id[:8]
+
+        # Quiescence check
+        last_at_iso = session.get("last_at") or session.get("started_at")
+        if last_at_iso:
+            try:
+                last_at = dt.datetime.strptime(last_at_iso, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=dt.timezone.utc)
+            except ValueError:
+                try:
+                    last_at = dt.datetime.strptime(last_at_iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=dt.timezone.utc)
+                except ValueError:
+                    # Can't parse; treat as quiesced (better to over-compile than miss)
+                    last_at = now - dt.timedelta(seconds=min_age_seconds + 1)
+            age_seconds = (now - last_at).total_seconds()
+            if age_seconds < min_age_seconds:
+                summary["skipped_too_recent"] += 1
+                continue
+
+        # Already-compiled check
+        if session_prefix in already_compiled:
+            summary["skipped_already_compiled"] += 1
+            continue
+
+        # Compile
+        try:
+            result = compile_session(
+                path,
+                apply=True,
+                no_privacy_filter=False,
+            )
+            summary["compiled"] += 1
+            summary["compiled_session_ids"].append({
+                "session_id": session_id,
+                "candidates": len(result.candidates),
+                "written": len(result.written),
+                "skipped_sensitive": result.skipped_sensitive,
+            })
+        except Exception as e:  # noqa: BLE001 — auto-compile must not crash the runner
+            summary["failed"] += 1
+            summary["failures"].append({
+                "session_id": session_id,
+                "error": f"{type(e).__name__}: {e}",
+            })
+
+    if args.json:
+        print(json.dumps(summary, indent=2, ensure_ascii=False))
+        return 0 if summary["failed"] == 0 else 1
+
+    print(f"auto-compile pass complete:")
+    print(f"  scanned:                  {summary['scanned']}")
+    print(f"  skipped (too recent):     {summary['skipped_too_recent']} (younger than {args.min_age_hours}h quiescence threshold)")
+    print(f"  skipped (already compiled): {summary['skipped_already_compiled']}")
+    print(f"  compiled:                 {summary['compiled']}")
+    print(f"  failed:                   {summary['failed']}")
+    if summary["compiled_session_ids"]:
+        print()
+        print("compiled sessions:")
+        for s in summary["compiled_session_ids"]:
+            print(f"  {s['session_id'][:13]}  candidates={s['candidates']:>5}  written={s['written']:>5}  skipped_sensitive={s['skipped_sensitive']}")
+    if summary["failures"]:
+        print()
+        print("failures:")
+        for f in summary["failures"]:
+            print(f"  {f['session_id'][:13]}  {f['error']}")
+    return 0 if summary["failed"] == 0 else 1
+
+
+def _already_compiled_session_prefixes() -> set[str]:
+    """Read the decisions log and return the set of session prefixes that
+    appear as `auto:transcript-compile@<prefix>` in the `author` field.
+
+    Tolerant: missing log file returns empty set (nothing compiled yet).
+    Bad JSON lines are skipped silently — this is a read-only scan, not
+    a validation pass.
+    """
+    state_root = pathlib.Path(os.environ.get("XDG_STATE_HOME") or (pathlib.Path.home() / ".local" / "state"))
+    decisions_path = state_root / "agent-continuity" / "decisions.jsonl"
+    if not decisions_path.exists():
+        return set()
+    prefixes: set[str] = set()
+    AUTHOR_PREFIX = "auto:transcript-compile@"
+    try:
+        with decisions_path.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                author = entry.get("author") or ""
+                if isinstance(author, str) and author.startswith(AUTHOR_PREFIX):
+                    prefixes.add(author[len(AUTHOR_PREFIX):])
+    except OSError:
+        pass
+    return prefixes
+
+
+# ──────────────────────────────────────────────────────────────────
+# Schedule (LaunchAgent management) — v0.5.4
+
+LAUNCHAGENT_LABEL_AUTO_COMPILE = "com.agent-continuity.transcript-auto-compile"
+
+def _launchagent_path() -> pathlib.Path:
+    return pathlib.Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHAGENT_LABEL_AUTO_COMPILE}.plist"
+
+def _autocompile_log_path() -> pathlib.Path:
+    return pathlib.Path.home() / "Library" / "Logs" / "agent-continuity" / "transcript-auto-compile.log"
+
+def _autocompile_plist(shim_path: str, interval_seconds: int) -> str:
+    log_path = str(_autocompile_log_path())
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{LAUNCHAGENT_LABEL_AUTO_COMPILE}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{shim_path}</string>
+        <string>transcript</string>
+        <string>auto-compile</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>{interval_seconds}</integer>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>{log_path}</string>
+    <key>StandardErrorPath</key>
+    <string>{log_path}</string>
+</dict>
+</plist>
+"""
+
+
+def cmd_schedule(args: argparse.Namespace) -> int:
+    """v0.5.4 LaunchAgent management for auto-compile.
+
+    `enable`: install plist + load via launchctl. Runs auto-compile every
+              N seconds (default 3600 = 1 hour, matching the default
+              quiescence threshold).
+    `disable`: unload + remove plist. Idempotent.
+    `status`: human + JSON-readable state including last run + log path.
+    """
+    import subprocess as sp
+    if sys.platform != "darwin":
+        if args.action != "status":
+            print("transcript schedule: only macOS (Darwin) is supported in v0.5.4.", file=sys.stderr)
+            print("                     Linux/systemd parity is a follow-up slice.", file=sys.stderr)
+            return 2
+
+    plist_path = _launchagent_path()
+    if args.action == "enable":
+        shim = str(pathlib.Path.home() / ".local" / "bin" / "agent-continuity")
+        if not pathlib.Path(shim).exists():
+            shim = "agent-continuity"
+        plist_path.parent.mkdir(parents=True, exist_ok=True)
+        _autocompile_log_path().parent.mkdir(parents=True, exist_ok=True)
+        plist_path.write_text(_autocompile_plist(shim, args.interval_seconds), encoding="utf-8")
+        print(f"wrote LaunchAgent: {plist_path}")
+        sp.run(["launchctl", "unload", str(plist_path)], capture_output=True, check=False)
+        rc = sp.run(["launchctl", "load", str(plist_path)], capture_output=True, text=True, check=False)
+        if rc.returncode != 0:
+            print(f"warn: launchctl load returned {rc.returncode}: {rc.stderr.strip()}", file=sys.stderr)
+            print("      plist is in place; investigate with `agent-continuity transcript schedule status`", file=sys.stderr)
+            return 1
+        print(f"loaded into launchd as {LAUNCHAGENT_LABEL_AUTO_COMPILE}")
+        print()
+        print("auto-compile will run every", args.interval_seconds, "seconds.")
+        print("audit trail:", _autocompile_log_path())
+        print()
+        print("disable any time with: agent-continuity transcript schedule disable")
+        return 0
+    if args.action == "disable":
+        if not plist_path.exists():
+            print(f"transcript schedule disable: no LaunchAgent at {plist_path} (already disabled)")
+            return 0
+        sp.run(["launchctl", "unload", str(plist_path)], capture_output=True, check=False)
+        try:
+            plist_path.unlink()
+            print(f"removed LaunchAgent: {plist_path}")
+        except OSError as e:
+            print(f"transcript schedule disable: failed to remove plist: {e}", file=sys.stderr)
+            return 1
+        return 0
+    if args.action == "status":
+        info: dict[str, Any] = {
+            "platform": sys.platform,
+            "launchagent_path": str(plist_path),
+            "launchagent_present": plist_path.exists(),
+            "log_path": str(_autocompile_log_path()),
+        }
+        if sys.platform == "darwin" and plist_path.exists():
+            rc = sp.run(["launchctl", "list", LAUNCHAGENT_LABEL_AUTO_COMPILE], capture_output=True, check=False)
+            info["launchctl_loaded"] = (rc.returncode == 0)
+        else:
+            info["launchctl_loaded"] = False
+        if args.json:
+            print(json.dumps(info, indent=2))
+            return 0
+        enabled = info["launchctl_loaded"]
+        print(f"transcript schedule:    {'ENABLED' if enabled else 'disabled'}")
+        print(f"  launchagent_path:     {info['launchagent_path']}")
+        print(f"  launchagent_present:  {info['launchagent_present']}")
+        print(f"  launchctl_loaded:     {info['launchctl_loaded']}")
+        print(f"  log_path:             {info['log_path']}")
+        return 0
+    print(f"transcript schedule: unknown action {args.action!r}", file=sys.stderr)
+    return 2
+
+
 def cmd_path(args: argparse.Namespace) -> int:
     matches = _find_by_prefix(args.session_id)
     if not matches:
@@ -461,6 +720,37 @@ def main() -> int:
     )
     p_compile.add_argument("--json", action="store_true", help="emit JSON")
     p_compile.set_defaults(func=cmd_compile)
+
+    p_auto = sub.add_parser(
+        "auto-compile",
+        help="(v0.5.4) one-pass auto-compile of all quiesced sessions not yet compiled",
+    )
+    p_auto.add_argument(
+        "--min-age-hours",
+        type=float,
+        default=1.0,
+        help="only compile sessions whose last activity is older than this many hours (default: 1)",
+    )
+    p_auto.add_argument("--json", action="store_true", help="emit JSON summary")
+    p_auto.set_defaults(func=cmd_auto_compile)
+
+    p_sched = sub.add_parser(
+        "schedule",
+        help="(v0.5.4) manage the LaunchAgent that runs auto-compile on a schedule",
+    )
+    p_sched.add_argument(
+        "action",
+        choices=["enable", "disable", "status"],
+        help="enable (install LaunchAgent), disable (remove), status (show state)",
+    )
+    p_sched.add_argument(
+        "--interval-seconds",
+        type=int,
+        default=3600,
+        help="how often the LaunchAgent runs auto-compile (default: 3600 = 1 hour)",
+    )
+    p_sched.add_argument("--json", action="store_true", help="emit JSON for status")
+    p_sched.set_defaults(func=cmd_schedule)
 
     args = ap.parse_args()
     return args.func(args)
